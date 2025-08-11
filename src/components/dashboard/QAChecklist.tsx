@@ -188,7 +188,7 @@ export const QAChecklist = () => {
         return false;
       }
 
-      updateCheck('rls', 'pass', `All tables accessible: ${tables.join(', ')}`);
+      updateCheck('rls', 'pass', `All tables accessible: clinics, providers, locations, services, patients`);
       return true;
     } catch (error) {
       updateCheck('rls', 'fail', `Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
