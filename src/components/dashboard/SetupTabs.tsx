@@ -5,7 +5,9 @@ import { PMSSetup } from './PMSSetup';
 import { ProvidersSetup } from './ProvidersSetup';
 import { LocationsSetup } from './LocationsSetup';
 import { AIReceptionistDashboard } from './AIReceptionistDashboard';
-import { Building, Settings, Users, MapPin, Bot } from 'lucide-react';
+import { TestDataManager } from './TestDataManager';
+import { QAChecklist } from './QAChecklist';
+import { Building, Settings, Users, MapPin, Bot, Database, CheckSquare } from 'lucide-react';
 
 export const SetupTabs = () => {
   return (
@@ -18,7 +20,7 @@ export const SetupTabs = () => {
       </div>
 
       <Tabs defaultValue="clinic" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-7">
           <TabsTrigger value="clinic" className="flex items-center gap-2">
             <Building className="h-4 w-4" />
             Clinic
@@ -34,6 +36,14 @@ export const SetupTabs = () => {
           <TabsTrigger value="locations" className="flex items-center gap-2">
             <MapPin className="h-4 w-4" />
             Locations
+          </TabsTrigger>
+          <TabsTrigger value="test-data" className="flex items-center gap-2">
+            <Database className="h-4 w-4" />
+            Test Data
+          </TabsTrigger>
+          <TabsTrigger value="qa" className="flex items-center gap-2">
+            <CheckSquare className="h-4 w-4" />
+            QA
           </TabsTrigger>
           <TabsTrigger value="ai" className="flex items-center gap-2">
             <Bot className="h-4 w-4" />
@@ -55,6 +65,14 @@ export const SetupTabs = () => {
 
         <TabsContent value="locations">
           <LocationsSetup />
+        </TabsContent>
+
+        <TabsContent value="test-data">
+          <TestDataManager />
+        </TabsContent>
+
+        <TabsContent value="qa">
+          <QAChecklist />
         </TabsContent>
 
         <TabsContent value="ai">
