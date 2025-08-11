@@ -11,7 +11,7 @@ export class DummyAdapter implements PMSInterface {
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     )
-    this.clinicId = credentials.clinicId || '550e8400-e29b-41d4-a716-446655440000'
+    this.clinicId = credentials?.clinicId || crypto.randomUUID()
   }
 
   async searchPatientByPhone(phoneNumber: string): Promise<Patient[]> {
@@ -96,7 +96,7 @@ export class DummyAdapter implements PMSInterface {
         service_id: appointmentData.serviceId || '550e8400-e29b-41d4-a716-446655440005', // Default to cleaning
         starts_at: appointmentData.startTime,
         ends_at: appointmentData.endTime,
-        source: 'ai_call'
+        source: 'voice_ai'
       })
       .select()
       .single()

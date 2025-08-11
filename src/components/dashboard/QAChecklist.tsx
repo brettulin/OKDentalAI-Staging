@@ -266,10 +266,10 @@ export const QAChecklist = () => {
       const startTime = Date.now();
       
       try {
-        const { data, error } = await supabase.functions.invoke('pms-integrations', {
+        const { data, error } = await supabase.functions.invoke('pms-test', {
           body: {
             action: 'listProviders',
-            officeId: offices[0].id
+            office_id: offices[0].id
           }
         });
 
@@ -537,7 +537,7 @@ export const QAChecklist = () => {
             service_id: serviceId,
             starts_at: slotStartsAt,
             ends_at: slotEndsAt,
-            source: 'qa_test'
+            source: 'manual'
           })
           .select('id')
           .single();
