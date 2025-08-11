@@ -124,9 +124,9 @@ export const ClinicSetup = () => {
 
       console.log('Auth user:', user.id);
       
-      // Verify auth context before insert
-      const { data: { user: authUser } } = await supabase.auth.getUser();
-      console.log('creating clinic for uid:', authUser?.id);
+      // 0) Confirm auth context in the UI - Phase A testing
+      const { data: { user: authUser }, error } = await supabase.auth.getUser();
+      console.log('creating clinic for uid=', authUser?.id, 'error=', error);
 
       // Create clinic - the trigger will automatically link the user to the clinic
       console.log('Creating clinic with data:', clinicForm);
