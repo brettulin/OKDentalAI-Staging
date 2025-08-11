@@ -2,7 +2,11 @@ import React from 'react';
 import { QAChecklist } from '@/components/dashboard/QAChecklist';
 
 const QAPage = () => {
-  return <QAChecklist />;
+  return (
+    <div className="p-6">
+      <QAChecklist />
+    </div>
+  );
 };
 
 export default QAPage;

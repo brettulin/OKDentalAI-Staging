@@ -1,92 +1,64 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
-import { useToast } from '@/components/ui/use-toast';
+import { useToast } from '@/hooks/use-toast';
+import { usePMSIntegration } from '@/hooks/usePMSIntegration';
+import { PMSTestModal } from './PMSTestModal';
+import { Loader2, Plus, Settings, TestTube } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
-import { Loader2, Plus, Settings, TestTube, CheckCircle, XCircle } from 'lucide-react';
-
-interface Office {
-  id: string;
-  name: string;
-  pms_type: string;
-  pms_credentials: any;
-  created_at: string;
-}
-
-interface PMSTestResult {
-  success: boolean;
-  tests: Record<string, any>;
-  summary: {
-    passed: number;
-    total: number;
-  };
-}
 
 export const PMSSetup = () => {
   const { toast } = useToast();
-  const [offices, setOffices] = useState<Office[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { offices, officesLoading, createOffice } = usePMSIntegration();
   const [creating, setCreating] = useState(false);
-  const [testing, setTesting] = useState<string | null>(null);
-  const [testResults, setTestResults] = useState<Record<string, PMSTestResult>>({});
+  const [testModalOpen, setTestModalOpen] = useState(false);
+  const [selectedOffice, setSelectedOffice] = useState<{ id: string; name: string } | null>(null);
 
   const [officeForm, setOfficeForm] = useState({
     name: '',
     pms_type: '',
-    credentials: {
-      apiKey: '',
-      baseUrl: '',
-      username: '',
-      password: '',
-      clientId: '',
-      clientSecret: ''
-    }
+    credentials: {} as any
   });
 
-  useEffect(() => {
-    loadOffices();
-  }, []);
-
-  const loadOffices = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('clinic_id')
-        .eq('user_id', user.id)
-        .maybeSingle();
-
-      if (!profile?.clinic_id) return;
-
-      const { data: officesData } = await supabase
-        .from('offices')
-        .select('*')
-        .eq('clinic_id', profile.clinic_id)
-        .order('created_at', { ascending: false });
-
-      setOffices(officesData || []);
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to load PMS integrations",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const createOffice = async (e: React.FormEvent) => {
+  const handleCreateOffice = async (e: React.FormEvent) => {
     e.preventDefault();
     setCreating(true);
 
     try {
+      // Normalize credentials based on PMS type
+      let normalizedCredentials;
+      switch (officeForm.pms_type) {
+        case 'dummy':
+          normalizedCredentials = { clinicId: `demo-${Date.now()}` };
+          break;
+        case 'carestack':
+          normalizedCredentials = {
+            apiKey: officeForm.credentials.apiKey,
+            baseUrl: officeForm.credentials.baseUrl
+          };
+          break;
+        case 'dentrix':
+          normalizedCredentials = {
+            username: officeForm.credentials.username,
+            password: officeForm.credentials.password,
+            baseUrl: officeForm.credentials.baseUrl
+          };
+          break;
+        case 'eaglesoft':
+          normalizedCredentials = {
+            clientId: officeForm.credentials.clientId,
+            clientSecret: officeForm.credentials.clientSecret,
+            baseUrl: officeForm.credentials.baseUrl
+          };
+          break;
+        default:
+          normalizedCredentials = officeForm.credentials;
+      }
+
+      // Get current user's clinic_id
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
 
@@ -94,35 +66,21 @@ export const PMSSetup = () => {
         .from('profiles')
         .select('clinic_id')
         .eq('user_id', user.id)
-        .maybeSingle();
+        .single();
 
       if (!profile?.clinic_id) throw new Error('No clinic found');
 
-      const { data, error } = await supabase
-        .from('offices')
-        .insert([{
-          name: officeForm.name,
-          pms_type: officeForm.pms_type,
-          pms_credentials: officeForm.credentials,
-          clinic_id: profile.clinic_id
-        }])
-        .select()
-        .single();
+      await createOffice({
+        name: officeForm.name,
+        pms_type: officeForm.pms_type,
+        pms_credentials: normalizedCredentials,
+        clinic_id: profile.clinic_id
+      });
 
-      if (error) throw error;
-
-      setOffices([data, ...offices]);
       setOfficeForm({
         name: '',
         pms_type: '',
-        credentials: {
-          apiKey: '',
-          baseUrl: '',
-          username: '',
-          password: '',
-          clientId: '',
-          clientSecret: ''
-        }
+        credentials: {}
       });
 
       toast({
@@ -140,35 +98,16 @@ export const PMSSetup = () => {
     }
   };
 
-  const testPMSIntegration = async (officeId: string) => {
-    setTesting(officeId);
-    
-    try {
-      const { data, error } = await supabase.functions.invoke('pms-test', {
-        body: { officeId, testPhone: '+1234567890' }
-      });
-
-      if (error) throw error;
-
-      setTestResults({ ...testResults, [officeId]: data });
-      
-      toast({
-        title: data.success ? "Test Passed" : "Test Failed",
-        description: `${data.summary.passed}/${data.summary.total} tests passed`,
-        variant: data.success ? "default" : "destructive",
-      });
-    } catch (error) {
-      toast({
-        title: "Test Error",
-        description: error instanceof Error ? error.message : "Failed to test PMS integration",
-        variant: "destructive",
-      });
-    } finally {
-      setTesting(null);
-    }
+  const handleTestOffice = (office: { id: string; name: string }) => {
+    setSelectedOffice(office);
+    setTestModalOpen(true);
   };
 
   const renderCredentialFields = () => {
+    if (!officeForm.credentials) {
+      return null;
+    }
+
     switch (officeForm.pms_type) {
       case 'carestack':
         return (
@@ -178,7 +117,7 @@ export const PMSSetup = () => {
               <Input
                 id="apiKey"
                 type="password"
-                value={officeForm.credentials.apiKey}
+                value={officeForm.credentials.apiKey || ''}
                 onChange={(e) => setOfficeForm({
                   ...officeForm,
                   credentials: { ...officeForm.credentials, apiKey: e.target.value }
@@ -191,7 +130,7 @@ export const PMSSetup = () => {
               <Input
                 id="baseUrl"
                 placeholder="https://api.carestack.com"
-                value={officeForm.credentials.baseUrl}
+                value={officeForm.credentials.baseUrl || ''}
                 onChange={(e) => setOfficeForm({
                   ...officeForm,
                   credentials: { ...officeForm.credentials, baseUrl: e.target.value }
@@ -208,7 +147,7 @@ export const PMSSetup = () => {
               <Label htmlFor="username">Username</Label>
               <Input
                 id="username"
-                value={officeForm.credentials.username}
+                value={officeForm.credentials.username || ''}
                 onChange={(e) => setOfficeForm({
                   ...officeForm,
                   credentials: { ...officeForm.credentials, username: e.target.value }
@@ -221,7 +160,7 @@ export const PMSSetup = () => {
               <Input
                 id="password"
                 type="password"
-                value={officeForm.credentials.password}
+                value={officeForm.credentials.password || ''}
                 onChange={(e) => setOfficeForm({
                   ...officeForm,
                   credentials: { ...officeForm.credentials, password: e.target.value }
@@ -234,7 +173,7 @@ export const PMSSetup = () => {
               <Input
                 id="baseUrl"
                 placeholder="http://your-dentrix-server.com"
-                value={officeForm.credentials.baseUrl}
+                value={officeForm.credentials.baseUrl || ''}
                 onChange={(e) => setOfficeForm({
                   ...officeForm,
                   credentials: { ...officeForm.credentials, baseUrl: e.target.value }
@@ -251,7 +190,7 @@ export const PMSSetup = () => {
               <Label htmlFor="clientId">Client ID</Label>
               <Input
                 id="clientId"
-                value={officeForm.credentials.clientId}
+                value={officeForm.credentials.clientId || ''}
                 onChange={(e) => setOfficeForm({
                   ...officeForm,
                   credentials: { ...officeForm.credentials, clientId: e.target.value }
@@ -264,7 +203,7 @@ export const PMSSetup = () => {
               <Input
                 id="clientSecret"
                 type="password"
-                value={officeForm.credentials.clientSecret}
+                value={officeForm.credentials.clientSecret || ''}
                 onChange={(e) => setOfficeForm({
                   ...officeForm,
                   credentials: { ...officeForm.credentials, clientSecret: e.target.value }
@@ -277,7 +216,7 @@ export const PMSSetup = () => {
               <Input
                 id="baseUrl"
                 placeholder="https://api.eaglesoft.com"
-                value={officeForm.credentials.baseUrl}
+                value={officeForm.credentials.baseUrl || ''}
                 onChange={(e) => setOfficeForm({
                   ...officeForm,
                   credentials: { ...officeForm.credentials, baseUrl: e.target.value }
@@ -292,7 +231,7 @@ export const PMSSetup = () => {
     }
   };
 
-  if (loading) {
+  if (officesLoading) {
     return (
       <div className="flex items-center justify-center p-8">
         <Loader2 className="h-8 w-8 animate-spin" />
@@ -321,7 +260,7 @@ export const PMSSetup = () => {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={createOffice} className="space-y-4">
+          <form onSubmit={handleCreateOffice} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="office-name">Office Name</Label>
               <Input
@@ -351,10 +290,19 @@ export const PMSSetup = () => {
               </Select>
             </div>
 
-            {officeForm.pms_type && (
+            {officeForm.pms_type && officeForm.pms_type !== 'dummy' && (
               <div className="space-y-4 p-4 border rounded-lg bg-muted/50">
                 <h4 className="font-medium">PMS Credentials</h4>
                 {renderCredentialFields()}
+              </div>
+            )}
+            
+            {officeForm.pms_type === 'dummy' && (
+              <div className="p-4 border rounded-lg bg-blue-50 border-blue-200">
+                <p className="text-sm text-blue-800">
+                  <strong>Demo Mode:</strong> This integration uses mock data for testing purposes. 
+                  No real credentials are required.
+                </p>
               </div>
             )}
 
@@ -367,7 +315,7 @@ export const PMSSetup = () => {
       </Card>
 
       {/* Existing Integrations */}
-      {offices.length > 0 && (
+      {offices && offices.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -376,72 +324,47 @@ export const PMSSetup = () => {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {offices.map((office) => {
-              const testResult = testResults[office.id];
-              return (
-                <div key={office.id} className="p-4 border rounded-lg">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h4 className="font-medium">{office.name}</h4>
-                      <p className="text-sm text-muted-foreground">
-                        {office.pms_type.toUpperCase()} Integration
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        Created: {new Date(office.created_at).toLocaleDateString()}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {testResult && (
-                        <div className="flex items-center gap-1">
-                          {testResult.success ? (
-                            <CheckCircle className="h-4 w-4 text-green-600" />
-                          ) : (
-                            <XCircle className="h-4 w-4 text-red-600" />
-                          )}
-                          <span className="text-sm">
-                            {testResult.summary.passed}/{testResult.summary.total}
-                          </span>
-                        </div>
-                      )}
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => testPMSIntegration(office.id)}
-                        disabled={testing === office.id}
-                      >
-                        {testing === office.id ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <TestTube className="h-4 w-4" />
-                        )}
-                        Test
-                      </Button>
-                    </div>
-                  </div>
-                  
-                  {testResult && (
-                    <div className="mt-3 pt-3 border-t">
-                      <h5 className="text-sm font-medium mb-2">Test Results:</h5>
-                      <div className="grid grid-cols-2 gap-2 text-xs">
-                        {Object.entries(testResult.tests).map(([test, result]) => (
-                          <div key={test} className="flex items-center gap-1">
-                            {result?.success ? (
-                              <CheckCircle className="h-3 w-3 text-green-600" />
-                            ) : (
-                              <XCircle className="h-3 w-3 text-red-600" />
-                            )}
-                            <span className="capitalize">{test.replace(/([A-Z])/g, ' $1')}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </CardContent>
-        </Card>
-      )}
-    </div>
-  );
+            {offices.map((office) => (
+              <div key={office.id} className="p-4 border rounded-lg">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="font-medium">{office.name}</h4>
+                    <p className="text-sm text-muted-foreground">
+                      {office.pms_type.toUpperCase()} Integration
+                     </p>
+                     <p className="text-xs text-muted-foreground">
+                       Created: {new Date(office.created_at).toLocaleDateString()}
+                     </p>
+                   </div>
+                   <div className="flex items-center gap-2">
+                     <Button
+                       variant="outline"
+                       size="sm"
+                       onClick={() => handleTestOffice({ id: office.id, name: office.name })}
+                     >
+                       <TestTube className="h-4 w-4 mr-1" />
+                       Test
+                     </Button>
+                   </div>
+                 </div>
+               </div>
+             ))}
+           </CardContent>
+         </Card>
+       )}
+
+       {/* Test Modal */}
+       {selectedOffice && (
+         <PMSTestModal
+           open={testModalOpen}
+           onClose={() => {
+             setTestModalOpen(false);
+             setSelectedOffice(null);
+           }}
+           officeId={selectedOffice.id}
+           officeName={selectedOffice.name}
+         />
+       )}
+     </div>
+   );
 };

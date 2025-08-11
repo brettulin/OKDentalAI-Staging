@@ -29,12 +29,15 @@ export function usePMSIntegration() {
     },
   });
 
-  // Create or update office
+  // Create or update office (upsert to prevent duplicates)
   const createOfficeMutation = useMutation({
     mutationFn: async (officeData: OfficeInsert) => {
       const { data, error } = await supabase
         .from('offices')
-        .insert(officeData)
+        .upsert(officeData, {
+          onConflict: 'clinic_id,name',
+          ignoreDuplicates: false
+        })
         .select()
         .single();
 

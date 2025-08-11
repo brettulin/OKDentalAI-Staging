@@ -1,12 +1,12 @@
 import React from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
-import { AuthProvider } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
-import { Phone, Users, Calendar, Settings, LogOut } from 'lucide-react';
+import { Phone, Users, Calendar, Settings, LogOut, Home } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { DebugPanel } from '@/components/debug/DebugPanel';
 
@@ -72,13 +72,17 @@ const AuthCard = () => {
 
 const Sidebar = () => {
   const { signOut } = useAuth();
+  const location = useLocation();
 
   const menuItems = [
-    { icon: Phone, label: 'Calls', href: '#calls' },
-    { icon: Users, label: 'Patients', href: '#patients' },
-    { icon: Calendar, label: 'Appointments', href: '#appointments' },
-    { icon: Settings, label: 'Settings', href: '#settings' },
+    { icon: Home, label: 'Setup', href: '/' },
+    { icon: Phone, label: 'Calls', href: '/calls' },
+    { icon: Users, label: 'Patients', href: '/patients' },
+    { icon: Calendar, label: 'Appointments', href: '/appointments' },
+    { icon: Settings, label: 'Settings', href: '/settings' },
   ];
+
+  const isActive = (href: string) => location.pathname === href;
 
   return (
     <div className="w-64 bg-sidebar border-r border-sidebar-border flex flex-col">
@@ -93,13 +97,17 @@ const Sidebar = () => {
         <ul className="space-y-2">
           {menuItems.map((item, index) => (
             <li key={index}>
-              <a
-                href={item.href}
-                className="flex items-center space-x-3 px-3 py-2 rounded-md text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
+              <Link
+                to={item.href}
+                className={`flex items-center space-x-3 px-3 py-2 rounded-md transition-colors ${
+                  isActive(item.href)
+                    ? 'bg-sidebar-accent text-sidebar-accent-foreground font-medium'
+                    : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
+                }`}
               >
                 <item.icon className="h-5 w-5" />
                 <span>{item.label}</span>
-              </a>
+              </Link>
             </li>
           ))}
         </ul>
