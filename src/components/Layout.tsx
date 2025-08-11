@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
-import { Phone, Users, Calendar, Settings, LogOut, Home } from 'lucide-react';
+import { Phone, Users, Calendar, Settings, LogOut, Home, Database } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { DebugPanel } from '@/components/debug/DebugPanel';
 
@@ -79,6 +79,7 @@ const Sidebar = () => {
     { icon: Phone, label: 'Calls', href: '/calls' },
     { icon: Users, label: 'Patients', href: '/patients' },
     { icon: Calendar, label: 'Appointments', href: '/appointments' },
+    { icon: Database, label: 'PMS Integration', href: '/pms' },
     { icon: Settings, label: 'Settings', href: '/settings' },
   ];
 

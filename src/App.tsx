@@ -6,6 +6,7 @@ import CallsPage from '@/pages/Calls';
 import PatientsPage from '@/pages/Patients';
 import AppointmentsPage from '@/pages/Appointments';
 import SettingsPage from '@/pages/Settings';
+import PMSPage from '@/pages/PMS';
 import { Layout } from '@/components/Layout';
 import { AuthProvider } from '@/hooks/useAuth';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
@@ -24,6 +25,7 @@ function App() {
                 <Route path="/patients" element={<ErrorBoundary><PatientsPage /></ErrorBoundary>} />
                 <Route path="/appointments" element={<ErrorBoundary><AppointmentsPage /></ErrorBoundary>} />
                 <Route path="/settings" element={<ErrorBoundary><SettingsPage /></ErrorBoundary>} />
+                <Route path="/pms" element={<ErrorBoundary><PMSPage /></ErrorBoundary>} />
                 <Route path="/qa" element={<ErrorBoundary><QAPage /></ErrorBoundary>} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
