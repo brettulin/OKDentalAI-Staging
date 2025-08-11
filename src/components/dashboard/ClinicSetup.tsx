@@ -60,12 +60,16 @@ export const ClinicSetup = () => {
 
   const loadData = async () => {
     try {
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
       // Get user's clinic
       const { data: profile } = await supabase
         .from('profiles')
         .select('clinic_id')
-        .eq('user_id', (await supabase.auth.getUser()).data.user?.id)
-        .single();
+        .eq('user_id', user.id)
+        .maybeSingle();
 
       if (profile?.clinic_id) {
         // Load clinic data
@@ -73,7 +77,7 @@ export const ClinicSetup = () => {
           .from('clinics')
           .select('*')
           .eq('id', profile.clinic_id)
-          .single();
+          .maybeSingle();
 
         setClinic(clinicData);
 
@@ -125,9 +129,9 @@ export const ClinicSetup = () => {
         .from('profiles')
         .select('*')
         .eq('user_id', user.id)
-        .single();
+        .maybeSingle();
 
-      if (profileCheckError && profileCheckError.code === 'PGRST116') {
+      if (!profile) {
         // Profile doesn't exist, create it
         console.log('Creating profile for user:', user.id);
         const { data: newProfile, error: createProfileError } = await supabase
@@ -137,7 +141,7 @@ export const ClinicSetup = () => {
             display_name: user.email?.split('@')[0] || 'User'
           }])
           .select()
-          .single();
+          .maybeSingle();
 
         if (createProfileError) {
           console.error('Profile creation error:', createProfileError);
@@ -157,7 +161,7 @@ export const ClinicSetup = () => {
         .from('clinics')
         .insert([clinicForm])
         .select()
-        .single();
+        .maybeSingle();
 
       if (clinicError) {
         console.error('Clinic creation error:', clinicError);
