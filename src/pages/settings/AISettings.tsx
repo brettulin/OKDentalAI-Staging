@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -10,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
-import { Settings, Save, Loader2 } from 'lucide-react';
+import { Settings, Save, Loader2, Play, Volume2 } from 'lucide-react';
 import { PageSkeleton } from '@/components/PageSkeleton';
 
 const AISettingsPage = () => {
@@ -87,9 +88,50 @@ const AISettingsPage = () => {
     },
   });
 
+  // Test voice synthesis
+  const testVoiceMutation = useMutation({
+    mutationFn: async (text: string) => {
+      const { data, error } = await supabase.functions.invoke('test-voice', {
+        body: { 
+          text,
+          voice_id: formData.voice_id,
+          language: formData.language 
+        },
+      });
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data) => {
+      if (data.audioUrl) {
+        // Play the audio
+        const audio = new Audio(data.audioUrl);
+        audio.play().catch(console.error);
+        toast({
+          title: 'Voice test successful',
+          description: 'Playing synthesized audio.',
+        });
+      } else {
+        toast({
+          title: 'Voice test completed',
+          description: 'Voice synthesis works but no audio returned.',
+        });
+      }
+    },
+    onError: (error) => {
+      console.error('Voice test error:', error);
+      toast({
+        title: 'Voice test failed',
+        description: error.message || 'Failed to test voice synthesis.',
+        variant: 'destructive',
+      });
+    },
+  });
+
   const [formData, setFormData] = useState({
     voice_provider: settings?.voice_provider || 'elevenlabs',
     voice_model: settings?.voice_model || 'eleven_multilingual_v2',
+    voice_id: settings?.voice_id || '9BWtsMINqrJLrRacOk9x', // Aria default
     language: settings?.language || 'en',
     transfer_number: settings?.transfer_number || '',
     greeting: '', // Add greeting field
@@ -107,6 +149,7 @@ const AISettingsPage = () => {
       setFormData({
         voice_provider: settings.voice_provider || 'elevenlabs',
         voice_model: settings.voice_model || 'eleven_multilingual_v2',
+        voice_id: settings.voice_id || '9BWtsMINqrJLrRacOk9x',
         language: settings.language || 'en',
         transfer_number: settings.transfer_number || '',
         greeting: (settings.booking_policy as any)?.greeting || '',
@@ -124,6 +167,7 @@ const AISettingsPage = () => {
     const submitData = {
       voice_provider: formData.voice_provider,
       voice_model: formData.voice_model,
+      voice_id: formData.voice_id,
       language: formData.language,
       transfer_number: formData.transfer_number,
       booking_policy: {
@@ -135,6 +179,11 @@ const AISettingsPage = () => {
     };
 
     await saveSettingsMutation.mutateAsync(submitData);
+  };
+
+  const handleTestVoice = () => {
+    const testText = formData.greeting || "Hello! Thank you for calling our dental office. How can I assist you today?";
+    testVoiceMutation.mutate(testText);
   };
 
   if (isLoading) {
@@ -209,6 +258,28 @@ const AISettingsPage = () => {
               </div>
 
               <div>
+                <Label htmlFor="voice_id">Voice</Label>
+                <Select 
+                  value={formData.voice_id} 
+                  onValueChange={(value) => setFormData(prev => ({ ...prev, voice_id: value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select voice" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="9BWtsMINqrJLrRacOk9x">Aria (Female)</SelectItem>
+                    <SelectItem value="CwhRBWXzGAHq8TQ4Fs17">Roger (Male)</SelectItem>
+                    <SelectItem value="EXAVITQu4vr4xnSDxMaL">Sarah (Female)</SelectItem>
+                    <SelectItem value="FGY2WhTYpPnrIDTdsKH5">Laura (Female)</SelectItem>
+                    <SelectItem value="IKne3meq5aSn9XLyUdCD">Charlie (Male)</SelectItem>
+                    <SelectItem value="JBFqnCBsd6RMkjVDRZzb">George (Male)</SelectItem>
+                    <SelectItem value="N2lVS1w4EtoT3dr4eOWO">Callum (Male)</SelectItem>
+                    <SelectItem value="SAz9YHcvj6GT2YYXdXww">River (Female)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
                 <Label htmlFor="language">Language</Label>
                 <Select 
                   value={formData.language} 
@@ -251,7 +322,7 @@ const AISettingsPage = () => {
               <p className="text-sm text-muted-foreground mt-1">
                 This greeting will be used when the AI answers calls. If empty, a default greeting will be used.
               </p>
-              <div className="mt-2">
+              <div className="mt-2 flex gap-2">
                 <Button
                   type="button"
                   variant="outline"
@@ -265,14 +336,30 @@ const AISettingsPage = () => {
                     setTestGreeting(`${greeting} (Language: ${languageText})`);
                   }}
                 >
-                  Test Greeting Preview
+                  <Volume2 className="h-4 w-4 mr-1" />
+                  Preview Text
                 </Button>
-                {testGreeting && (
-                  <div className="mt-2 p-3 bg-muted rounded-lg text-sm">
-                    <strong>Preview:</strong> {testGreeting}
-                  </div>
-                )}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleTestVoice}
+                  disabled={testVoiceMutation.isPending}
+                  className="flex items-center gap-1"
+                >
+                  {testVoiceMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Play className="h-4 w-4" />
+                  )}
+                  Test Voice
+                </Button>
               </div>
+              {testGreeting && (
+                <div className="mt-2 p-3 bg-muted rounded-lg text-sm">
+                  <strong>Preview:</strong> {testGreeting}
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
