@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { getAuthContext } from '../_shared/auth.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -25,6 +26,7 @@ serve(async (req) => {
   }
 
   try {
+    const authContext = await getAuthContext(req);
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
@@ -33,29 +35,7 @@ serve(async (req) => {
     const requestBody = await req.json();
     const { action } = requestBody;
 
-    // Get Authorization header for user authentication
-    const authHeader = req.headers.get('Authorization');
-    if (authHeader) {
-      supabase.auth.setAuth(authHeader.replace('Bearer ', ''));
-    }
-
-    // Get user's clinic
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      throw new Error('Authentication required');
-    }
-
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('clinic_id')
-      .eq('user_id', user.id)
-      .single();
-
-    if (!profile?.clinic_id) {
-      throw new Error('User not associated with a clinic');
-    }
-
-    console.log(`Call Manager: ${action} for clinic ${profile.clinic_id}`);
+    console.log(`Call Manager: ${action} for clinic ${authContext.clinic_id}`);
 
     switch (action) {
       case 'start_call': {
@@ -63,7 +43,7 @@ serve(async (req) => {
         
         const callData = {
           id: callId,
-          clinic_id: profile.clinic_id,
+          clinic_id: authContext.clinic_id,
           office_id: officeId || null,
           twilio_call_sid: twilioCallSid || null,
           started_at: new Date().toISOString(),
@@ -97,6 +77,18 @@ serve(async (req) => {
           console.error('Initial turn creation error:', turnError);
         }
 
+        // Write audit log
+        await supabase
+          .from('audit_log')
+          .insert({
+            clinic_id: authContext.clinic_id,
+            entity: 'call',
+            entity_id: callId,
+            action: 'call.started',
+            actor: authContext.user.email || 'system',
+            diff_json: { from_number: fromNumber, to_number: toNumber }
+          });
+
         return new Response(
           JSON.stringify({
             success: true,
@@ -120,11 +112,23 @@ serve(async (req) => {
             outcome: validOutcome
           })
           .eq('id', callId)
-          .eq('clinic_id', profile.clinic_id)
+          .eq('clinic_id', authContext.clinic_id)
           .select()
           .single();
 
         if (error) throw error;
+
+        // Write audit log
+        await supabase
+          .from('audit_log')
+          .insert({
+            clinic_id: authContext.clinic_id,
+            entity: 'call',
+            entity_id: callId,
+            action: 'call.ended',
+            actor: authContext.user.email || 'system',
+            diff_json: { outcome: validOutcome }
+          });
 
         return new Response(
           JSON.stringify({ success: true, call }),
@@ -149,11 +153,23 @@ serve(async (req) => {
           .from('calls')
           .update(updateData)
           .eq('id', callId)
-          .eq('clinic_id', profile.clinic_id)
+          .eq('clinic_id', authContext.clinic_id)
           .select()
           .single();
 
         if (error) throw error;
+
+        // Write audit log
+        await supabase
+          .from('audit_log')
+          .insert({
+            clinic_id: authContext.clinic_id,
+            entity: 'call',
+            entity_id: callId,
+            action: 'call.updated',
+            actor: authContext.user.email || 'system',
+            diff_json: updateData
+          });
 
         return new Response(
           JSON.stringify({ success: true, call }),
@@ -168,7 +184,7 @@ serve(async (req) => {
           .from('calls')
           .select('*')
           .eq('id', callId)
-          .eq('clinic_id', profile.clinic_id)
+          .eq('clinic_id', authContext.clinic_id)
           .single();
 
         if (callError) throw callError;
@@ -203,7 +219,7 @@ serve(async (req) => {
         error: error.message
       }),
       { 
-        status: 500,
+        status: error.message.includes('Authentication') ? 401 : 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
       }
     );

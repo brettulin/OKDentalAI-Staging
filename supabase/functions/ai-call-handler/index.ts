@@ -1,6 +1,7 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { getAuthContext } from '../_shared/auth.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -26,6 +27,7 @@ serve(async (req) => {
   }
 
   try {
+    const authContext = await getAuthContext(req);
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
@@ -34,7 +36,7 @@ serve(async (req) => {
     const requestBody = await req.json();
     const { type, scenario, callId, userMessage, conversationHistory, context, officeId } = requestBody;
 
-    console.log(`AI Call Handler: ${type} for call ${callId}`);
+    console.log(`AI Call Handler: ${type} for clinic ${authContext.clinic_id}`);
 
     switch (type) {
       case 'simulate_call': {
@@ -42,11 +44,12 @@ serve(async (req) => {
         const { data: clinic } = await supabase
           .from('clinics')
           .select('name, main_phone, timezone')
+          .eq('id', authContext.clinic_id)
           .single();
 
         // Create a simulated call with realistic conversation
         const callData = {
-          clinic_id: requestBody.clinic_id,
+          clinic_id: authContext.clinic_id,
           office_id: officeId || null,
           started_at: new Date().toISOString(),
           ended_at: new Date(Date.now() + Math.random() * 300000).toISOString(), // Random duration up to 5 min
@@ -115,6 +118,18 @@ serve(async (req) => {
           throw turnsError;
         }
 
+        // Write audit log
+        await supabase
+          .from('audit_log')
+          .insert({
+            clinic_id: authContext.clinic_id,
+            entity: 'call',
+            entity_id: call.id,
+            action: 'call.simulated',
+            actor: authContext.user.email || 'system',
+            diff_json: { scenario, turns_created: turns.length }
+          });
+
         return new Response(
           JSON.stringify({
             success: true,
@@ -169,6 +184,12 @@ serve(async (req) => {
               content: turn.text
             }));
 
+            // Get clinic hours for context
+            const { data: clinicHours } = await supabase
+              .from('clinic_hours')
+              .select('*')
+              .eq('clinic_id', authContext.clinic_id);
+
             const systemPrompt = `You are an AI dental office receptionist. You are helpful, professional, and efficient. Your main tasks are:
 1. Schedule appointments for patients
 2. Answer questions about dental services
@@ -176,7 +197,21 @@ serve(async (req) => {
 4. Collect patient information
 5. Transfer calls to human staff when needed
 
-Keep responses concise and friendly. If booking appointments, ask for name, phone, and preferred times. For emergencies, prioritize urgent scheduling.`;
+Current clinic hours: ${clinicHours?.map(h => `${getDayName(h.dow)}: ${formatTime(h.open_min)} - ${formatTime(h.close_min)}`).join(', ') || 'Not specified'}
+
+Keep responses concise and friendly. If booking appointments, ask for name, phone, and preferred times. For emergencies, prioritize urgent scheduling.
+
+Available intents to classify user requests:
+- appointment_booking: User wants to schedule a new appointment
+- appointment_reschedule: User wants to change existing appointment
+- appointment_cancel: User wants to cancel appointment
+- emergency: Urgent dental issues requiring immediate attention
+- insurance_inquiry: Questions about insurance coverage
+- hours_inquiry: Questions about office hours
+- transfer_request: User wants to speak to human staff
+- general_inquiry: Other questions
+
+Always classify the user's intent in your response metadata.`;
 
             const response = await fetch('https://api.openai.com/v1/chat/completions', {
               method: 'POST',
@@ -203,14 +238,23 @@ Keep responses concise and friendly. If booking appointments, ask for name, phon
               // Analyze intent based on message content
               const lowerMessage = userMessage.toLowerCase();
               if (lowerMessage.includes('appointment') || lowerMessage.includes('book') || lowerMessage.includes('schedule')) {
-                intent = 'book_appointment';
+                intent = 'appointment_booking';
                 actions = ['collect_info', 'check_availability'];
               } else if (lowerMessage.includes('emergency') || lowerMessage.includes('pain') || lowerMessage.includes('urgent')) {
                 intent = 'emergency';
                 actions = ['urgent_scheduling'];
               } else if (lowerMessage.includes('cancel') || lowerMessage.includes('reschedule')) {
-                intent = 'modify_appointment';
+                intent = 'appointment_reschedule';
                 actions = ['lookup_appointment'];
+              } else if (lowerMessage.includes('insurance')) {
+                intent = 'insurance_inquiry';
+                actions = ['provide_info'];
+              } else if (lowerMessage.includes('hours') || lowerMessage.includes('open')) {
+                intent = 'hours_inquiry';
+                actions = ['provide_hours'];
+              } else if (lowerMessage.includes('transfer') || lowerMessage.includes('speak to')) {
+                intent = 'transfer_request';
+                actions = ['transfer'];
               }
             } else {
               console.error('OpenAI API error:', await response.text());
@@ -242,6 +286,22 @@ Keep responses concise and friendly. If booking appointments, ask for name, phon
           throw assistantTurnError;
         }
 
+        // Update call with intent if it's booking-related
+        if (intent === 'appointment_booking' || intent === 'emergency') {
+          await supabase
+            .from('calls')
+            .update({ 
+              outcome: intent === 'emergency' ? 'transferred' : 'appointment_booked',
+              transcript_json: { 
+                ...(context || {}), 
+                last_intent: intent,
+                booking_attempt: true 
+              }
+            })
+            .eq('id', callId)
+            .eq('clinic_id', authContext.clinic_id);
+        }
+
         return new Response(
           JSON.stringify({
             success: true,
@@ -256,11 +316,6 @@ Keep responses concise and friendly. If booking appointments, ask for name, phon
 
       case 'get_calls': {
         const limit = requestBody.limit || 50;
-        const clinicId = requestBody.clinic_id;
-        
-        if (!clinicId) {
-          throw new Error('clinic_id is required');
-        }
         
         const { data: calls, error } = await supabase
           .from('calls')
@@ -268,7 +323,7 @@ Keep responses concise and friendly. If booking appointments, ask for name, phon
             *,
             turns:turns(count)
           `)
-          .eq('clinic_id', clinicId)
+          .eq('clinic_id', authContext.clinic_id)
           .order('started_at', { ascending: false })
           .limit(limit);
 
@@ -281,17 +336,17 @@ Keep responses concise and friendly. If booking appointments, ask for name, phon
       }
 
       case 'get_call_details': {
-        const { callId, clinic_id } = requestBody;
+        const { callId: requestCallId } = requestBody;
         
-        if (!callId || !clinic_id) {
-          throw new Error('callId and clinic_id are required');
+        if (!requestCallId) {
+          throw new Error('callId is required');
         }
         
         const { data: call, error: callError } = await supabase
           .from('calls')
           .select('*')
-          .eq('id', callId)
-          .eq('clinic_id', clinic_id)
+          .eq('id', requestCallId)
+          .eq('clinic_id', authContext.clinic_id)
           .single();
 
         if (callError) throw callError;
@@ -299,7 +354,7 @@ Keep responses concise and friendly. If booking appointments, ask for name, phon
         const { data: turns, error: turnsError } = await supabase
           .from('turns')
           .select('*')
-          .eq('call_id', callId)
+          .eq('call_id', requestCallId)
           .order('at', { ascending: true });
 
         if (turnsError) throw turnsError;
@@ -326,7 +381,7 @@ Keep responses concise and friendly. If booking appointments, ask for name, phon
         error: error.message
       }),
       { 
-        status: 500,
+        status: error.message.includes('Authentication') ? 401 : 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
       }
     );
@@ -366,4 +421,17 @@ function generateFallbackResponse(userMessage: string): string {
   ];
 
   return responses[Math.floor(Math.random() * responses.length)];
+}
+
+function getDayName(dow: number): string {
+  const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  return days[dow] || 'Unknown';
+}
+
+function formatTime(minutes: number): string {
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  const displayHours = hours % 12 || 12;
+  return `${displayHours}:${mins.toString().padStart(2, '0')} ${ampm}`;
 }
