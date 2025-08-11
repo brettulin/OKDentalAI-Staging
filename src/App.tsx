@@ -8,6 +8,7 @@ import Schedule from '@/pages/appointments/Schedule';
 import Appointments from '@/pages/Appointments';
 import Calls from '@/pages/Calls';
 import CallDetails from '@/pages/calls/CallDetails';
+import CallsExport from '@/pages/calls/CallsExport';
 import PMS from '@/pages/PMS';
 import Settings from '@/pages/Settings';
 import AISettings from '@/pages/settings/AISettings';
