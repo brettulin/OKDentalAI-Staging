@@ -14,29 +14,11 @@ import { Settings, Save, Loader2 } from 'lucide-react';
 import { PageSkeleton } from '@/components/PageSkeleton';
 
 const AISettingsPage = () => {
-  const { user } = useAuth();
+  const { profile } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // Get user profile to check clinic setup
-  const { data: profile } = useQuery({
-    queryKey: ['profile', user?.id],
-    queryFn: async () => {
-      if (!user) throw new Error('Not authenticated');
-      
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('user_id', user.id)
-        .single();
-      
-      if (error) throw error;
-      return data;
-    },
-    enabled: !!user,
-  });
-
-  // Fetch AI settings
+  // Fetch AI settings directly using clinic from profile
   const { data: settings, isLoading } = useQuery({
     queryKey: ['ai-settings', profile?.clinic_id],
     queryFn: async () => {
