@@ -2,6 +2,7 @@ import { PMSInterface } from './pms-interface.ts'
 import { CareStackAdapter } from './carestack-adapter.ts'
 import { DentrixAdapter } from './dentrix-adapter.ts'
 import { EaglesoftAdapter } from './eaglesoft-adapter.ts'
+import { DummyAdapter } from './dummy-adapter.ts'
 
 export class PMSFactory {
   static createAdapter(pmsType: string, credentials: any): PMSInterface {
@@ -12,6 +13,8 @@ export class PMSFactory {
         return new DentrixAdapter(credentials)
       case 'eaglesoft':
         return new EaglesoftAdapter(credentials)
+      case 'dummy':
+        return new DummyAdapter(credentials)
       default:
         throw new Error(`Unsupported PMS type: ${pmsType}`)
     }
