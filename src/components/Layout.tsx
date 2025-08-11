@@ -124,38 +124,34 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
 
   if (loading) {
     return (
-      <AuthProvider>
-        <div className="min-h-screen flex items-center justify-center bg-background">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
-            <p className="mt-2 text-muted-foreground">Loading...</p>
-          </div>
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+          <p className="mt-2 text-muted-foreground">Loading...</p>
         </div>
         <DebugPanel />
-      </AuthProvider>
+      </div>
     );
   }
 
   if (!user) {
     return (
-      <AuthProvider>
+      <>
         <AuthCard />
         <DebugPanel />
-      </AuthProvider>
+      </>
     );
   }
 
   return (
-    <AuthProvider>
-      <div className="min-h-screen bg-background">
-        <div className="flex">
-          <Sidebar />
-          <main className="flex-1">
-            {children}
-          </main>
-        </div>
-        <DebugPanel />
+    <div className="min-h-screen bg-background">
+      <div className="flex">
+        <Sidebar />
+        <main className="flex-1">
+          {children}
+        </main>
       </div>
-    </AuthProvider>
+      <DebugPanel />
+    </div>
   );
 };
