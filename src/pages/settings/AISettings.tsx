@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -131,7 +130,7 @@ const AISettingsPage = () => {
   const [formData, setFormData] = useState({
     voice_provider: settings?.voice_provider || 'elevenlabs',
     voice_model: settings?.voice_model || 'eleven_multilingual_v2',
-    voice_id: settings?.voice_id || '9BWtsMINqrJLrRacOk9x', // Aria default
+    voice_id: (settings as any)?.voice_id || '9BWtsMINqrJLrRacOk9x', // Aria default
     language: settings?.language || 'en',
     transfer_number: settings?.transfer_number || '',
     greeting: '', // Add greeting field
@@ -149,7 +148,7 @@ const AISettingsPage = () => {
       setFormData({
         voice_provider: settings.voice_provider || 'elevenlabs',
         voice_model: settings.voice_model || 'eleven_multilingual_v2',
-        voice_id: settings.voice_id || '9BWtsMINqrJLrRacOk9x',
+        voice_id: (settings as any).voice_id || '9BWtsMINqrJLrRacOk9x',
         language: settings.language || 'en',
         transfer_number: settings.transfer_number || '',
         greeting: (settings.booking_policy as any)?.greeting || '',

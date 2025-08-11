@@ -23,6 +23,7 @@ export type Database = {
           language: string | null
           transfer_number: string | null
           updated_at: string
+          voice_id: string | null
           voice_model: string | null
           voice_provider: string | null
         }
@@ -34,6 +35,7 @@ export type Database = {
           language?: string | null
           transfer_number?: string | null
           updated_at?: string
+          voice_id?: string | null
           voice_model?: string | null
           voice_provider?: string | null
         }
@@ -45,6 +47,7 @@ export type Database = {
           language?: string | null
           transfer_number?: string | null
           updated_at?: string
+          voice_id?: string | null
           voice_model?: string | null
           voice_provider?: string | null
         }
