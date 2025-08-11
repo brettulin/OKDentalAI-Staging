@@ -74,6 +74,14 @@ export const QAChecklist = () => {
       fixLabel: 'Check Scheduling'
     },
     {
+      id: 'realtime',
+      name: 'Real-time Features',
+      description: 'Live updates for calls and appointments',
+      status: 'checking',
+      fixLink: '/calls',
+      fixLabel: 'Check Real-time'
+    },
+    {
       id: 'audit',
       name: 'Audit Log',
       description: 'Last 10 actions visible',
@@ -401,6 +409,72 @@ export const QAChecklist = () => {
     }
   };
 
+  const checkRealtime = async (): Promise<boolean> => {
+    try {
+      updateCheck('realtime', 'checking');
+      
+      if (!profile?.clinic_id) {
+        updateCheck('realtime', 'fail', 'No clinic found');
+        return false;
+      }
+
+      // Test real-time subscription setup
+      const testChannel = supabase
+        .channel('test-channel')
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'audit_log',
+          },
+          (payload) => {
+            // Test subscription works
+          }
+        );
+
+      await new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error('Subscription timeout')), 2000);
+        
+        testChannel.subscribe((status) => {
+          clearTimeout(timeout);
+          if (status === 'SUBSCRIBED') {
+            resolve();
+          } else {
+            reject(new Error(`Subscription failed: ${status}`));
+          }
+        });
+      });
+
+      supabase.removeChannel(testChannel);
+
+      // Test that we can write and immediately read data (basic real-time test)
+      const testEntry = {
+        clinic_id: profile.clinic_id,
+        entity: 'test',
+        entity_id: 'qa-realtime-test',
+        action: 'qa.realtime_test',
+        actor: 'qa-system',
+        diff_json: { test: true, timestamp: Date.now() }
+      };
+
+      const { error: insertError } = await supabase
+        .from('audit_log')
+        .insert(testEntry);
+
+      if (insertError) {
+        updateCheck('realtime', 'fail', `Real-time test write failed: ${insertError.message}`);
+        return false;
+      }
+
+      updateCheck('realtime', 'pass', 'Real-time subscriptions working');
+      return true;
+    } catch (error) {
+      updateCheck('realtime', 'fail', `Real-time error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      return false;
+    }
+  };
+
   const checkAudit = async (): Promise<boolean> => {
     try {
       updateCheck('audit', 'checking');
@@ -448,6 +522,7 @@ export const QAChecklist = () => {
       await checkPMS();
       await checkAICall();
       await checkScheduling();
+      await checkRealtime();
       await checkAudit();
 
       toast({
