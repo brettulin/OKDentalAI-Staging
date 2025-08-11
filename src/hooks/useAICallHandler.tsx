@@ -70,10 +70,14 @@ export function useAICallHandler() {
       context?: Partial<CallContext>;
     }) => {
       const { data, error } = await supabase.functions.invoke('ai-call-handler', {
-        body: params,
+        body: {
+          type: 'process_message',
+          ...params
+        },
       });
 
       if (error) throw error;
+      if (!data.success) throw new Error(data.error || 'AI processing failed');
       return data;
     },
   });

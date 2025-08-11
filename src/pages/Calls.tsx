@@ -271,6 +271,13 @@ const CallsPage = () => {
                       View Thread
                     </Button>
                   </CallThreadDrawer>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => window.location.href = `/calls/${call.id}`}
+                  >
+                    View Details
+                  </Button>
                 </div>
               </div>
             </CardHeader>

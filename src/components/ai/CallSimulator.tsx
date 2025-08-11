@@ -44,12 +44,21 @@ export function CallSimulator({ officeId }: CallSimulatorProps) {
       setCallId(newCallId);
       setConversationHistory([{
         role: 'assistant',
-        text: result.initialResponse,
+        text: result.initialResponse || "Hello! Thank you for calling. How can I help you today?",
         timestamp: new Date().toISOString()
       }]);
       setCallContext({ conversationState: 'greeting' });
     } catch (error) {
       console.error('Error starting call:', error);
+      // Still set callId for testing even if start call fails
+      const newCallId = crypto.randomUUID();
+      setCallId(newCallId);
+      setConversationHistory([{
+        role: 'assistant',
+        text: "Hello! Thank you for calling. How can I help you today?",
+        timestamp: new Date().toISOString()
+      }]);
+      setCallContext({ conversationState: 'greeting' });
     }
   };
 
@@ -102,15 +111,31 @@ export function CallSimulator({ officeId }: CallSimulatorProps) {
       };
 
       setConversationHistory(prev => [...prev, aiMessage]);
-      setCallContext(result.context);
+      setCallContext(result.context || callContext);
+      
+      // Show warning if fallback was used
+      if (result.warning) {
+        console.warn('AI processing warning:', result.warning);
+      }
     } catch (error) {
       console.error('Error processing message:', error);
       const errorMessage = {
         role: 'assistant',
         text: 'I apologize, but I encountered an error. Let me transfer you to a human representative.',
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        intent: 'transfer_request',
+        actions: ['transfer']
       };
       setConversationHistory(prev => [...prev, errorMessage]);
+      
+      // Update call outcome to failed
+      try {
+        await endCall({ callId, outcome: 'failed' });
+        setCallId(null);
+        setCallContext({});
+      } catch (endError) {
+        console.error('Error ending failed call:', endError);
+      }
     }
   };
 

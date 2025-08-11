@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import Index from '@/pages/Index';
 import QAPage from '@/pages/QA';
 import CallsPage from '@/pages/Calls';
+import CallDetailsPage from '@/pages/calls/CallDetails';
 import PatientsPage from '@/pages/Patients';
 import AppointmentsPage from '@/pages/Appointments';
 import SettingsPage from '@/pages/Settings';
@@ -22,6 +23,7 @@ function App() {
               <Routes>
                 <Route path="/" element={<ErrorBoundary><Index /></ErrorBoundary>} />
                 <Route path="/calls" element={<ErrorBoundary><CallsPage /></ErrorBoundary>} />
+                <Route path="/calls/:id" element={<ErrorBoundary><CallDetailsPage /></ErrorBoundary>} />
                 <Route path="/patients" element={<ErrorBoundary><PatientsPage /></ErrorBoundary>} />
                 <Route path="/appointments" element={<ErrorBoundary><AppointmentsPage /></ErrorBoundary>} />
                 <Route path="/settings" element={<ErrorBoundary><SettingsPage /></ErrorBoundary>} />

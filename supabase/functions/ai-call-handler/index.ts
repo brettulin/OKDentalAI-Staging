@@ -169,10 +169,11 @@ serve(async (req) => {
           throw userTurnError;
         }
 
-        // Get AI response
+        // Get AI response with proper error handling
         let aiResponse = '';
         let intent = 'general_inquiry';
         let actions = ['respond'];
+        let errorDetails = null;
 
         const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
         
@@ -257,17 +258,49 @@ Always classify the user's intent in your response metadata.`;
                 actions = ['transfer'];
               }
             } else {
-              console.error('OpenAI API error:', await response.text());
-              throw new Error('OpenAI API error');
+              const errorText = await response.text();
+              console.error('OpenAI API error:', errorText);
+              throw new Error(`OpenAI API error: ${errorText}`);
             }
           } catch (error) {
             console.error('OpenAI processing error:', error);
-            // Fall back to simple responses
+            errorDetails = error.message;
+            // Fall back to rule-based responses
             aiResponse = generateFallbackResponse(userMessage);
+            // Analyze intent for fallback
+            const lowerMessage = userMessage.toLowerCase();
+            if (lowerMessage.includes('appointment') || lowerMessage.includes('book') || lowerMessage.includes('schedule')) {
+              intent = 'appointment_booking';
+              actions = ['collect_info', 'check_availability'];
+            } else if (lowerMessage.includes('emergency') || lowerMessage.includes('pain') || lowerMessage.includes('urgent')) {
+              intent = 'emergency';
+              actions = ['urgent_scheduling'];
+            } else if (lowerMessage.includes('cancel') || lowerMessage.includes('reschedule')) {
+              intent = 'appointment_reschedule';
+              actions = ['lookup_appointment'];
+            } else if (lowerMessage.includes('insurance')) {
+              intent = 'insurance_inquiry';
+              actions = ['provide_info'];
+            } else if (lowerMessage.includes('hours') || lowerMessage.includes('open')) {
+              intent = 'hours_inquiry';
+              actions = ['provide_hours'];
+            } else if (lowerMessage.includes('transfer') || lowerMessage.includes('speak to')) {
+              intent = 'transfer_request';
+              actions = ['transfer'];
+            }
           }
         } else {
           // Use fallback responses when no API key
           aiResponse = generateFallbackResponse(userMessage);
+          // Analyze intent for fallback
+          const lowerMessage = userMessage.toLowerCase();
+          if (lowerMessage.includes('appointment') || lowerMessage.includes('book') || lowerMessage.includes('schedule')) {
+            intent = 'appointment_booking';
+            actions = ['collect_info', 'check_availability'];
+          } else if (lowerMessage.includes('emergency') || lowerMessage.includes('pain') || lowerMessage.includes('urgent')) {
+            intent = 'emergency';
+            actions = ['urgent_scheduling'];
+          }
         }
 
         // Add AI response to database
@@ -286,12 +319,15 @@ Always classify the user's intent in your response metadata.`;
           throw assistantTurnError;
         }
 
-        // Update call with intent if it's booking-related
+        // Update call with intent and ensure it has a valid outcome
+        const finalOutcome = intent === 'emergency' ? 'transferred' : 
+                            intent === 'appointment_booking' ? 'appointment_booked' : 'completed';
+        
         if (intent === 'appointment_booking' || intent === 'emergency') {
           await supabase
             .from('calls')
             .update({ 
-              outcome: intent === 'emergency' ? 'transferred' : 'appointment_booked',
+              outcome: finalOutcome,
               transcript_json: { 
                 ...(context || {}), 
                 last_intent: intent,
@@ -308,7 +344,8 @@ Always classify the user's intent in your response metadata.`;
             response: aiResponse,
             intent,
             actions,
-            context: { ...context, last_response: aiResponse, intent }
+            context: { ...context, last_response: aiResponse, intent },
+            ...(errorDetails && { warning: `Fallback used: ${errorDetails}` })
           }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
