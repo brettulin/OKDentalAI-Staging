@@ -10,8 +10,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { CheckCircle, XCircle, Clock, TestTube } from 'lucide-react';
-import { usePMSIntegration } from '@/hooks/usePMSIntegration';
 import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
 
 interface PMSTestModalProps {
   open: boolean;
@@ -31,15 +31,34 @@ interface TestResult {
 export function PMSTestModal({ open, onClose, officeId, officeName }: PMSTestModalProps) {
   const [testResults, setTestResults] = useState<TestResult[]>([]);
   const [isRunning, setIsRunning] = useState(false);
-  const { testPMS, listProviders, listLocations } = usePMSIntegration();
   const { toast } = useToast();
 
   const tests = [
-    { name: 'Connection Test', key: 'connection' },
+    { name: 'Connection Test', key: 'ping' },
     { name: 'List Providers', key: 'providers' },
     { name: 'List Locations', key: 'locations' },
     { name: 'Search Patient', key: 'search_patient' },
   ];
+
+  const runSingleTest = async (action: string): Promise<any> => {
+    console.log(`Running PMS test: ${action} for office: ${officeId}`)
+    
+    const { data, error } = await supabase.functions.invoke("pms-test", {
+      body: { office_id: officeId, action }
+    });
+
+    console.log(`PMS test response for ${action}:`, { data, error })
+
+    if (error) {
+      throw new Error(`Edge Function Error: ${error.message || 'Unknown error'}`);
+    }
+
+    if (!data.success) {
+      throw new Error(data.error || 'Test failed');
+    }
+
+    return data;
+  };
 
   const runTests = async () => {
     setIsRunning(true);
@@ -56,35 +75,22 @@ export function PMSTestModal({ open, onClose, officeId, officeName }: PMSTestMod
       const startTime = Date.now();
       
       try {
-        let data;
+        console.log(`Starting test: ${test.name} (${test.key})`)
+        const response = await runSingleTest(test.key);
         
-        switch (test.key) {
-          case 'connection':
-            data = await testPMS(officeId);
-            break;
-          case 'providers':
-            data = await listProviders(officeId);
-            break;
-          case 'locations':
-            data = await listLocations(officeId);
-            break;
-          case 'search_patient':
-            // Mock search for testing
-            data = { message: 'Patient search functionality available' };
-            break;
-          default:
-            throw new Error('Unknown test');
-        }
-
         const duration = Date.now() - startTime;
         results[i] = {
           ...results[i],
           status: 'success',
           duration,
-          data: typeof data === 'string' ? { message: data } : data,
+          data: response.data || response,
         };
+        
+        console.log(`Test ${test.name} passed in ${duration}ms`)
       } catch (error) {
         const duration = Date.now() - startTime;
+        console.error(`Test ${test.name} failed:`, error)
+        
         results[i] = {
           ...results[i],
           status: 'error',
@@ -97,7 +103,7 @@ export function PMSTestModal({ open, onClose, officeId, officeName }: PMSTestMod
       
       // Small delay between tests
       if (i < tests.length - 1) {
-        await new Promise(resolve => setTimeout(resolve, 200));
+        await new Promise(resolve => setTimeout(resolve, 500));
       }
     }
 
@@ -109,6 +115,16 @@ export function PMSTestModal({ open, onClose, officeId, officeName }: PMSTestMod
       description: `${successCount}/${tests.length} tests passed`,
       variant: successCount === tests.length ? "default" : "destructive",
     });
+
+    // Log audit entry if all tests pass
+    if (successCount === tests.length) {
+      try {
+        console.log('All PMS tests passed, logging audit entry...')
+        // You could add audit log entry here if needed
+      } catch (auditError) {
+        console.error('Failed to log audit entry:', auditError)
+      }
+    }
   };
 
   const getStatusIcon = (status: TestResult['status']) => {

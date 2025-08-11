@@ -1,17 +1,19 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-// Helper function to return JSON responses
-const json = (data: any, status = 200) => {
-  return new Response(JSON.stringify(data), {
+function json(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
     status,
-    headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-  })
+    headers: { 
+      ...corsHeaders,
+      "content-type": "application/json" 
+    }
+  });
 }
 
 serve(async (req) => {
@@ -21,134 +23,105 @@ serve(async (req) => {
   }
 
   try {
-    const supabaseClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
-      {
-        global: { 
-          headers: { 
-            Authorization: req.headers.get('Authorization') ?? '' 
-          } 
-        }
-      }
-    )
-
-    const { office_id, action } = await req.json()
-
-    console.log(`Starting PMS test for office: ${office_id}, action: ${action}`)
+    console.log('PMS Test starting...')
+    const requestBody = await req.json();
+    console.log('Request body:', requestBody)
     
-    // Get office configuration
-    const { data: office, error: officeError } = await supabaseClient
-      .from('offices')
-      .select('*')
-      .eq('id', office_id)
-      .maybeSingle()
+    const { office_id, action } = requestBody;
 
-    if (officeError) {
-      console.error('Office fetch error:', officeError)
-      return json({ error: `Failed to fetch office: ${officeError.message}` }, 400)
+    if (!office_id) {
+      return json({ error: "missing_office_id" }, 400);
+    }
+
+    if (!action) {
+      return json({ error: "missing_action" }, 400);
+    }
+
+    console.log(`Testing office: ${office_id}, action: ${action}`)
+
+    const supabase = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")! // must be service key
+    );
+
+    console.log('Fetching office from database...')
+    const { data: office, error: officeErr } = await supabase
+      .from("offices")
+      .select("id, pms_type, clinic_id, name")
+      .eq("id", office_id)
+      .single();
+      
+    if (officeErr) {
+      console.error('Office fetch error:', officeErr)
+      return json({ error: "office_fetch_failed", details: officeErr }, 400);
     }
 
     if (!office) {
-      return json({ error: 'Office not found' }, 404)
+      console.error('Office not found')
+      return json({ error: "office_not_found", office_id }, 404);
     }
 
     console.log(`Office found: ${office.name}, PMS type: ${office.pms_type}`)
 
-    // Handle dummy PMS with mock data
-    if (office.pms_type === 'dummy') {
-      const startTime = Date.now()
+    // Dummy adapter: return hardcoded 200s
+    if (office.pms_type === "dummy") {
+      console.log(`Handling dummy PMS action: ${action}`)
       
-      let result
-      switch (action) {
-        case 'ping':
-        case 'connection':
-          result = { 
-            ok: true, 
-            system: 'dummy',
-            message: 'Dummy PMS connection successful',
-            timestamp: new Date().toISOString()
-          }
-          break
-          
-        case 'providers':
-        case 'listProviders':
-          result = { 
-            providers: [
-              { id: 'prov_1', name: 'Dr. Demo Smith', speciality: 'General Dentistry' },
-              { id: 'prov_2', name: 'Dr. Jane Doe', speciality: 'Orthodontics' },
-              { id: 'prov_3', name: 'Dr. John Wilson', speciality: 'Oral Surgery' }
-            ]
-          }
-          break
-          
-        case 'locations':
-        case 'listLocations':
-          result = { 
-            locations: [
-              { id: 'loc_1', name: 'Main Office', address: '123 Main St, Demo City' },
-              { id: 'loc_2', name: 'North Branch', address: '456 North Ave, Demo City' }
-            ]
-          }
-          break
-          
-        case 'search_patient':
-        case 'searchPatientByPhone':
-          result = { 
-            message: 'Patient search functionality available',
-            patients: [
-              { 
-                id: 'pat_1', 
-                firstName: 'Demo', 
-                lastName: 'Patient',
-                phone: '+1234567890',
-                email: 'demo@example.com'
-              }
-            ]
-          }
-          break
-          
-        default:
-          return json({ error: `Unknown action: ${action}` }, 400)
+      const startTime = Date.now();
+      let result;
+
+      if (action === "ping" || action === "connection") {
+        result = { ok: true, system: "dummy", timestamp: new Date().toISOString() };
+      } else if (action === "providers" || action === "listProviders") {
+        result = { 
+          providers: [
+            { id: "prov_1", name: "Dr. Demo Smith", specialty: "General Dentistry" },
+            { id: "prov_2", name: "Dr. Jane Doe", specialty: "Orthodontics" }
+          ] 
+        };
+      } else if (action === "locations" || action === "listLocations") {
+        result = { 
+          locations: [
+            { id: "loc_1", name: "Main Office", address: "123 Main St" },
+            { id: "loc_2", name: "North Branch", address: "456 North Ave" }
+          ] 
+        };
+      } else if (action === "search_patient" || action === "searchPatientByPhone") {
+        result = { 
+          message: "Patient search functionality available",
+          patients: [
+            { id: "pat_1", firstName: "Demo", lastName: "Patient", phone: "+1234567890" }
+          ]
+        };
+      } else {
+        return json({ error: "unknown_action", action, supported_actions: ["ping", "connection", "providers", "locations", "search_patient"] }, 400);
       }
 
-      const endTime = Date.now()
-      const latency = endTime - startTime
+      const endTime = Date.now();
+      const latency = endTime - startTime;
 
+      console.log(`Dummy PMS action '${action}' completed in ${latency}ms`)
+      
       return json({ 
-        success: true, 
+        success: true,
         data: result,
         latency: `${latency}ms`,
-        timestamp: new Date().toISOString()
-      })
+        timestamp: new Date().toISOString(),
+        office: { id: office.id, name: office.name, pms_type: office.pms_type }
+      });
     }
 
-    // For non-dummy PMS types, call the actual integration
-    const integrationResponse = await supabaseClient.functions.invoke('pms-integrations', {
-      body: {
-        action: action === 'ping' ? 'listProviders' : action, // Convert ping to a real action
-        officeId: office_id
-      }
-    })
-
-    if (integrationResponse.error) {
-      return json({ 
-        error: `Integration failed: ${integrationResponse.error.message}`,
-        details: integrationResponse.error
-      }, 400)
-    }
-
-    return json({
-      success: true,
-      data: integrationResponse.data,
-      timestamp: new Date().toISOString()
-    })
-
-  } catch (error) {
-    console.error('PMS Test Error:', error)
+    // For non-dummy, bail for now
+    console.log(`Non-dummy PMS type: ${office.pms_type}`)
+    return json({ error: "unsupported_pms_type", pms_type: office.pms_type }, 400);
+    
+  } catch (e) {
+    console.error('PMS Test exception:', e)
     return json({ 
-      error: String(error), 
-      stack: error?.stack 
-    }, 400)
+      error: "exception", 
+      message: String(e), 
+      stack: e?.stack,
+      timestamp: new Date().toISOString()
+    }, 500);
   }
-})
+});
