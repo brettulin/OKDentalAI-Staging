@@ -355,54 +355,226 @@ export const QAChecklist = () => {
         return false;
       }
 
-      // Check if we have required data
-      const [
-        { data: providers },
-        { data: locations },
-        { data: services },
-        { data: patients },
-        { data: slots }
-      ] = await Promise.all([
-        supabase.from('providers').select('id').eq('clinic_id', profile.clinic_id).limit(1),
-        supabase.from('locations').select('id').eq('clinic_id', profile.clinic_id).limit(1),
-        supabase.from('services').select('id').eq('clinic_id', profile.clinic_id).limit(1),
-        supabase.from('patients').select('id').eq('clinic_id', profile.clinic_id).limit(1),
-        supabase.from('slots').select('id').eq('clinic_id', profile.clinic_id).eq('status', 'open').limit(1)
-      ]);
+      // Ensure required data exists, create if missing
+      let providerId, locationId, serviceId, patientId;
 
-      if (!providers?.[0] || !locations?.[0] || !services?.[0] || !patients?.[0] || !slots?.[0]) {
-        updateCheck('scheduling', 'fail', 'Missing required data for appointment booking');
-        return false;
+      // Check/create provider
+      const { data: providers } = await supabase
+        .from('providers')
+        .select('id')
+        .eq('clinic_id', profile.clinic_id)
+        .limit(1);
+
+      if (!providers?.[0]) {
+        const { data: newProvider, error: providerError } = await supabase
+          .from('providers')
+          .insert({
+            clinic_id: profile.clinic_id,
+            name: 'QA Test Provider',
+            specialty: 'General Dentistry'
+          })
+          .select('id')
+          .single();
+        
+        if (providerError) {
+          updateCheck('scheduling', 'fail', `Failed to create provider: ${providerError.message}`);
+          return false;
+        }
+        providerId = newProvider.id;
+      } else {
+        providerId = providers[0].id;
       }
 
-      // Create a test appointment
-      const now = new Date();
-      const startTime = new Date(now.getTime() + 24 * 60 * 60 * 1000); // Tomorrow
-      startTime.setHours(10, 0, 0, 0);
-      const endTime = new Date(startTime.getTime() + 60 * 60 * 1000); // 1 hour later
+      // Check/create location
+      const { data: locations } = await supabase
+        .from('locations')
+        .select('id')
+        .eq('clinic_id', profile.clinic_id)
+        .limit(1);
 
-      const { data: appointmentData, error: appointmentError } = await supabase
-        .from('appointments')
-        .insert({
-          clinic_id: profile.clinic_id,
-          patient_id: patients[0].id,
-          provider_id: providers[0].id,
-          location_id: locations[0].id,
-          service_id: services[0].id,
-          starts_at: startTime.toISOString(),
-          ends_at: endTime.toISOString(),
-          source: 'qa_test'
-        })
-        .select()
-        .single();
-
-      if (appointmentError) {
-        updateCheck('scheduling', 'fail', `Appointment creation failed: ${appointmentError.message}`);
-        return false;
+      if (!locations?.[0]) {
+        const { data: newLocation, error: locationError } = await supabase
+          .from('locations')
+          .insert({
+            clinic_id: profile.clinic_id,
+            name: 'QA Test Location',
+            address: '123 Test St'
+          })
+          .select('id')
+          .single();
+        
+        if (locationError) {
+          updateCheck('scheduling', 'fail', `Failed to create location: ${locationError.message}`);
+          return false;
+        }
+        locationId = newLocation.id;
+      } else {
+        locationId = locations[0].id;
       }
 
-      updateCheck('scheduling', 'pass', `Test appointment ${appointmentData.id} created`);
-      return true;
+      // Check/create service
+      const { data: services } = await supabase
+        .from('services')
+        .select('id')
+        .eq('clinic_id', profile.clinic_id)
+        .limit(1);
+
+      if (!services?.[0]) {
+        const { data: newService, error: serviceError } = await supabase
+          .from('services')
+          .insert({
+            clinic_id: profile.clinic_id,
+            name: 'QA Test Service',
+            duration_min: 60
+          })
+          .select('id')
+          .single();
+        
+        if (serviceError) {
+          updateCheck('scheduling', 'fail', `Failed to create service: ${serviceError.message}`);
+          return false;
+        }
+        serviceId = newService.id;
+      } else {
+        serviceId = services[0].id;
+      }
+
+      // Check/create patient
+      const { data: patients } = await supabase
+        .from('patients')
+        .select('id')
+        .eq('clinic_id', profile.clinic_id)
+        .limit(1);
+
+      if (!patients?.[0]) {
+        const { data: newPatient, error: patientError } = await supabase
+          .from('patients')
+          .insert({
+            clinic_id: profile.clinic_id,
+            full_name: 'QA Test Patient',
+            phone: '+1234567890',
+            email: 'qa-test@example.com'
+          })
+          .select('id')
+          .single();
+        
+        if (patientError) {
+          updateCheck('scheduling', 'fail', `Failed to create patient: ${patientError.message}`);
+          return false;
+        }
+        patientId = newPatient.id;
+      } else {
+        patientId = patients[0].id;
+      }
+
+      // Check/create available slot
+      const { data: slots } = await supabase
+        .from('slots')
+        .select('id, starts_at, ends_at')
+        .eq('clinic_id', profile.clinic_id)
+        .eq('provider_id', providerId)
+        .eq('status', 'open')
+        .gte('starts_at', new Date().toISOString())
+        .limit(1);
+
+      let slotId, slotStartsAt, slotEndsAt;
+
+      if (!slots?.[0]) {
+        // Create a slot 2 hours from now
+        const slotStart = new Date();
+        slotStart.setHours(slotStart.getHours() + 2);
+        const slotEnd = new Date(slotStart);
+        slotEnd.setMinutes(slotEnd.getMinutes() + 60);
+
+        const { data: newSlot, error: slotError } = await supabase
+          .from('slots')
+          .insert({
+            clinic_id: profile.clinic_id,
+            provider_id: providerId,
+            location_id: locationId,
+            starts_at: slotStart.toISOString(),
+            ends_at: slotEnd.toISOString(),
+            status: 'open'
+          })
+          .select('id, starts_at, ends_at')
+          .single();
+        
+        if (slotError) {
+          updateCheck('scheduling', 'fail', `Failed to create slot: ${slotError.message}`);
+          return false;
+        }
+        slotId = newSlot.id;
+        slotStartsAt = newSlot.starts_at;
+        slotEndsAt = newSlot.ends_at;
+      } else {
+        slotId = slots[0].id;
+        slotStartsAt = slots[0].starts_at;
+        slotEndsAt = slots[0].ends_at;
+      }
+
+      // Now test the booking flow with transaction-like behavior
+      try {
+        // Step 1: Hold the slot
+        const { error: holdError } = await supabase
+          .from('slots')
+          .update({ status: 'held' })
+          .eq('id', slotId)
+          .eq('status', 'open'); // Only update if still open
+
+        if (holdError) {
+          updateCheck('scheduling', 'fail', `Failed to hold slot: ${holdError.message}`);
+          return false;
+        }
+
+        // Step 2: Create appointment
+        const { data: appointmentData, error: appointmentError } = await supabase
+          .from('appointments')
+          .insert({
+            clinic_id: profile.clinic_id,
+            patient_id: patientId,
+            provider_id: providerId,
+            location_id: locationId,
+            service_id: serviceId,
+            starts_at: slotStartsAt,
+            ends_at: slotEndsAt,
+            source: 'qa_test'
+          })
+          .select('id')
+          .single();
+
+        if (appointmentError) {
+          // Rollback: release the slot
+          await supabase
+            .from('slots')
+            .update({ status: 'open' })
+            .eq('id', slotId);
+          
+          updateCheck('scheduling', 'fail', `Appointment creation failed: ${appointmentError.message}`);
+          return false;
+        }
+
+        // Step 3: Mark slot as booked
+        const { error: bookError } = await supabase
+          .from('slots')
+          .update({ status: 'booked' })
+          .eq('id', slotId);
+
+        if (bookError) {
+          updateCheck('scheduling', 'warning', `Slot booking update failed: ${bookError.message}`);
+        }
+
+        updateCheck('scheduling', 'pass', `Appointment ${appointmentData.id} booked successfully`);
+        return true;
+
+      } catch (bookingError) {
+        // Ensure slot is released on any error
+        await supabase
+          .from('slots')
+          .update({ status: 'open' })
+          .eq('id', slotId);
+        throw bookingError;
+      }
+
     } catch (error) {
       updateCheck('scheduling', 'fail', `Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
       return false;
@@ -418,59 +590,74 @@ export const QAChecklist = () => {
         return false;
       }
 
-      // Test real-time subscription setup
-      const testChannel = supabase
-        .channel('test-channel')
-        .on(
-          'postgres_changes',
-          {
-            event: 'INSERT',
-            schema: 'public',
-            table: 'audit_log',
-          },
-          (payload) => {
-            // Test subscription works
-          }
-        );
-
-      await new Promise<void>((resolve, reject) => {
-        const timeout = setTimeout(() => reject(new Error('Subscription timeout')), 2000);
+      return new Promise((resolve) => {
+        let resolved = false;
+        const testId = crypto.randomUUID(); // Generate proper UUID
         
-        testChannel.subscribe((status) => {
-          clearTimeout(timeout);
-          if (status === 'SUBSCRIBED') {
-            resolve();
-          } else {
-            reject(new Error(`Subscription failed: ${status}`));
+        // Set up realtime subscription test
+        const channel = supabase
+          .channel(`qa-realtime-test-${testId}`)
+          .on(
+            'postgres_changes',
+            {
+              event: 'INSERT',
+              schema: 'public',
+              table: 'calls',
+              filter: `clinic_id=eq.${profile.clinic_id}`,
+            },
+            (payload) => {
+              const callData = payload.new as any;
+              if (callData.transcript_json?.qa_realtime_test === testId && !resolved) {
+                resolved = true;
+                supabase.removeChannel(channel);
+                updateCheck('realtime', 'pass', 'Real-time updates working');
+                resolve(true);
+              }
+            }
+          )
+          .subscribe();
+
+        // Insert test record after subscription is set up
+        setTimeout(async () => {
+          try {
+            const { error } = await supabase
+              .from('calls')
+              .insert({
+                clinic_id: profile.clinic_id,
+                outcome: 'completed',
+                transcript_json: { qa_realtime_test: testId }
+              });
+
+            if (error) {
+              if (!resolved) {
+                resolved = true;
+                supabase.removeChannel(channel);
+                updateCheck('realtime', 'fail', `Failed to insert test record: ${error.message}`);
+                resolve(false);
+              }
+            }
+          } catch (insertError) {
+            if (!resolved) {
+              resolved = true;
+              supabase.removeChannel(channel);
+              updateCheck('realtime', 'fail', `Insert error: ${insertError instanceof Error ? insertError.message : 'Unknown error'}`);
+              resolve(false);
+            }
           }
-        });
+        }, 1000);
+
+        // Timeout after 5 seconds
+        setTimeout(() => {
+          if (!resolved) {
+            resolved = true;
+            supabase.removeChannel(channel);
+            updateCheck('realtime', 'fail', 'Real-time subscription timeout');
+            resolve(false);
+          }
+        }, 5000);
       });
-
-      supabase.removeChannel(testChannel);
-
-      // Test that we can write and immediately read data (basic real-time test)
-      const testEntry = {
-        clinic_id: profile.clinic_id,
-        entity: 'test',
-        entity_id: 'qa-realtime-test',
-        action: 'qa.realtime_test',
-        actor: 'qa-system',
-        diff_json: { test: true, timestamp: Date.now() }
-      };
-
-      const { error: insertError } = await supabase
-        .from('audit_log')
-        .insert(testEntry);
-
-      if (insertError) {
-        updateCheck('realtime', 'fail', `Real-time test write failed: ${insertError.message}`);
-        return false;
-      }
-
-      updateCheck('realtime', 'pass', 'Real-time subscriptions working');
-      return true;
     } catch (error) {
-      updateCheck('realtime', 'fail', `Real-time error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      updateCheck('realtime', 'fail', `Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
       return false;
     }
   };
@@ -481,6 +668,24 @@ export const QAChecklist = () => {
       
       if (!profile?.clinic_id) {
         updateCheck('audit', 'fail', 'No clinic found');
+        return false;
+      }
+
+      // Write a test audit entry first to ensure we have some data
+      const testAuditId = crypto.randomUUID();
+      const { error: auditInsertError } = await supabase
+        .from('audit_log')
+        .insert({
+          clinic_id: profile.clinic_id,
+          entity: 'qa_test',
+          entity_id: testAuditId,
+          action: 'qa.audit_test',
+          actor: 'qa-system',
+          diff_json: { test: true, timestamp: Date.now() }
+        });
+
+      if (auditInsertError) {
+        updateCheck('audit', 'fail', `Failed to create audit entry: ${auditInsertError.message}`);
         return false;
       }
 

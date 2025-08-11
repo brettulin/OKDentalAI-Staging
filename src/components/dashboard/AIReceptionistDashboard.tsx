@@ -8,11 +8,13 @@ import { CallSimulator } from '@/components/ai/CallSimulator';
 import { usePMSIntegration } from '@/hooks/usePMSIntegration';
 import { useAICallHandler } from '@/hooks/useAICallHandler';
 import { Phone, Settings, TestTube, Activity } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 export function AIReceptionistDashboard() {
   const { offices, officesLoading, testPMS, isTestingPMS } = usePMSIntegration();
   const { useCallsList } = useAICallHandler();
   const { data: calls, isLoading: callsLoading } = useCallsList();
+  const navigate = useNavigate();
 
   const [selectedOfficeId, setSelectedOfficeId] = useState<string>('');
 
@@ -191,7 +193,11 @@ export function AIReceptionistDashboard() {
                             </p>
                           )}
                         </div>
-                        <Button variant="outline" size="sm">
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => navigate(`/calls/${call.id}`)}
+                        >
                           View Details
                         </Button>
                       </div>
@@ -237,7 +243,11 @@ export function AIReceptionistDashboard() {
                   <p className="text-sm text-muted-foreground">
                     Configure how the AI receptionist handles different types of calls and requests.
                   </p>
-                  <Button variant="outline" className="mt-2">
+                  <Button 
+                    variant="outline" 
+                    className="mt-2"
+                    onClick={() => navigate('/settings/ai')}
+                  >
                     Configure AI Settings
                   </Button>
                 </div>
