@@ -122,46 +122,15 @@ export const ClinicSetup = () => {
         throw new Error('You must be logged in to create a clinic');
       }
 
-      console.log('Current user:', user.id);
+      console.log('Auth user:', user.id);
 
-      // Check if user profile exists, create if not
-      let { data: profile, error: profileCheckError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('user_id', user.id)
-        .maybeSingle();
-
-      if (!profile) {
-        // Profile doesn't exist, create it
-        console.log('Creating profile for user:', user.id);
-        const { data: newProfile, error: createProfileError } = await supabase
-          .from('profiles')
-          .insert([{ 
-            user_id: user.id,
-            display_name: user.email?.split('@')[0] || 'User'
-          }])
-          .select()
-          .maybeSingle();
-
-        if (createProfileError) {
-          console.error('Profile creation error:', createProfileError);
-          throw new Error(`Failed to create user profile: ${createProfileError.message}`);
-        }
-        profile = newProfile;
-      } else if (profileCheckError) {
-        console.error('Profile check error:', profileCheckError);
-        throw new Error(`Profile error: ${profileCheckError.message}`);
-      }
-
-      console.log('User profile:', profile);
-
-      // Create clinic
+      // Create clinic - the trigger will automatically link the user to the clinic
       console.log('Creating clinic with data:', clinicForm);
       const { data: newClinic, error: clinicError } = await supabase
         .from('clinics')
         .insert([clinicForm])
         .select()
-        .maybeSingle();
+        .single();
 
       if (clinicError) {
         console.error('Clinic creation error:', clinicError);
@@ -169,19 +138,8 @@ export const ClinicSetup = () => {
       }
 
       console.log('Clinic created:', newClinic);
-
-      // Update user profile with clinic_id
-      const { error: profileUpdateError } = await supabase
-        .from('profiles')
-        .update({ clinic_id: newClinic.id })
-        .eq('user_id', user.id);
-
-      if (profileUpdateError) {
-        console.error('Profile update error:', profileUpdateError);
-        throw new Error(`Failed to link clinic to profile: ${profileUpdateError.message}`);
-      }
-
       setClinic(newClinic);
+      
       toast({
         title: "Success",
         description: "Clinic created successfully!",
