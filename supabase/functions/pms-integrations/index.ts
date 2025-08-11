@@ -16,22 +16,15 @@ serve(async (req) => {
   try {
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
       {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false
+        global: { 
+          headers: { 
+            Authorization: req.headers.get('Authorization') ?? '' 
+          } 
         }
       }
     )
-
-    const authHeader = req.headers.get('Authorization')!
-    const token = authHeader.replace('Bearer ', '')
-    const { data: user } = await supabaseClient.auth.getUser(token)
-
-    if (!user?.user) {
-      throw new Error('Unauthorized')
-    }
 
     const { action, officeId, ...payload } = await req.json()
 
@@ -40,7 +33,7 @@ serve(async (req) => {
       .from('offices')
       .select('*')
       .eq('id', officeId)
-      .single()
+      .maybeSingle()
 
     if (officeError || !office) {
       throw new Error('Office not found')

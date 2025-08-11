@@ -6,6 +6,14 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+// Helper function to return JSON responses
+const json = (data: any, status = 200) => {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+  })
+}
+
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -15,160 +23,132 @@ serve(async (req) => {
   try {
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+      {
+        global: { 
+          headers: { 
+            Authorization: req.headers.get('Authorization') ?? '' 
+          } 
+        }
+      }
     )
 
-    const { officeId, testPhone = "+1234567890" } = await req.json()
+    const { office_id, action } = await req.json()
 
-    console.log('Starting PMS integration test...')
+    console.log(`Starting PMS test for office: ${office_id}, action: ${action}`)
     
-    // Test credentials - replace with real CareStack test credentials
-    const testCredentials = {
-      clientId: Deno.env.get('CARESTACK_TEST_CLIENT_ID') || 'test_client_id',
-      clientSecret: Deno.env.get('CARESTACK_TEST_CLIENT_SECRET') || 'test_client_secret',
-      baseUrl: Deno.env.get('CARESTACK_TEST_BASE_URL') || 'https://api-sandbox.carestack.com/v1'
-    }
-
-    // Create or update test office
+    // Get office configuration
     const { data: office, error: officeError } = await supabaseClient
       .from('offices')
-      .upsert({
-        id: officeId,
-        name: 'Test Office',
-        pms_type: 'carestack',
-        pms_credentials: testCredentials,
-        clinic_id: '00000000-0000-0000-0000-000000000000' // Default test clinic
-      })
-      .select()
-      .single()
+      .select('*')
+      .eq('id', office_id)
+      .maybeSingle()
 
     if (officeError) {
-      throw new Error(`Office setup failed: ${officeError.message}`)
+      console.error('Office fetch error:', officeError)
+      return json({ error: `Failed to fetch office: ${officeError.message}` }, 400)
     }
 
-    // Test sequence
-    const results = []
-
-    // 1. List providers
-    try {
-      const providersResponse = await supabaseClient.functions.invoke('pms-integrations', {
-        body: {
-          action: 'listProviders',
-          officeId: office.id
-        }
-      })
-      results.push({ test: 'listProviders', ...providersResponse })
-    } catch (error) {
-      results.push({ test: 'listProviders', error: error.message })
+    if (!office) {
+      return json({ error: 'Office not found' }, 404)
     }
 
-    // 2. List locations
-    try {
-      const locationsResponse = await supabaseClient.functions.invoke('pms-integrations', {
-        body: {
-          action: 'listLocations',
-          officeId: office.id
-        }
-      })
-      results.push({ test: 'listLocations', ...locationsResponse })
-    } catch (error) {
-      results.push({ test: 'listLocations', error: error.message })
-    }
+    console.log(`Office found: ${office.name}, PMS type: ${office.pms_type}`)
 
-    // 3. Search for existing patient
-    try {
-      const searchResponse = await supabaseClient.functions.invoke('pms-integrations', {
-        body: {
-          action: 'searchPatientByPhone',
-          phoneNumber: testPhone,
-          officeId: office.id
-        }
-      })
-      results.push({ test: 'searchPatientByPhone', ...searchResponse })
-    } catch (error) {
-      results.push({ test: 'searchPatientByPhone', error: error.message })
-    }
-
-    // 4. Create patient if not found
-    try {
-      const createResponse = await supabaseClient.functions.invoke('pms-integrations', {
-        body: {
-          action: 'createPatient',
-          patientData: {
-            firstName: 'Test',
-            lastName: 'Patient',
-            phone: testPhone,
-            email: 'test@example.com',
-            dateOfBirth: '1990-01-01'
-          },
-          officeId: office.id
-        }
-      })
-      results.push({ test: 'createPatient', ...createResponse })
-    } catch (error) {
-      results.push({ test: 'createPatient', error: error.message })
-    }
-
-    // 5. Get available slots (if we have providers)
-    const providersResult = results.find(r => r.test === 'listProviders')
-    if (providersResult?.data?.data?.[0]) {
-      try {
-        const providerId = providersResult.data.data[0].id
-        const tomorrow = new Date()
-        tomorrow.setDate(tomorrow.getDate() + 1)
-        const dayAfter = new Date()
-        dayAfter.setDate(dayAfter.getDate() + 2)
-
-        const slotsResponse = await supabaseClient.functions.invoke('pms-integrations', {
-          body: {
-            action: 'getAvailableSlots',
-            providerId,
-            dateRange: {
-              from: tomorrow.toISOString().split('T')[0],
-              to: dayAfter.toISOString().split('T')[0]
-            },
-            officeId: office.id
+    // Handle dummy PMS with mock data
+    if (office.pms_type === 'dummy') {
+      const startTime = Date.now()
+      
+      let result
+      switch (action) {
+        case 'ping':
+        case 'connection':
+          result = { 
+            ok: true, 
+            system: 'dummy',
+            message: 'Dummy PMS connection successful',
+            timestamp: new Date().toISOString()
           }
-        })
-        results.push({ test: 'getAvailableSlots', ...slotsResponse })
-      } catch (error) {
-        results.push({ test: 'getAvailableSlots', error: error.message })
+          break
+          
+        case 'providers':
+        case 'listProviders':
+          result = { 
+            providers: [
+              { id: 'prov_1', name: 'Dr. Demo Smith', speciality: 'General Dentistry' },
+              { id: 'prov_2', name: 'Dr. Jane Doe', speciality: 'Orthodontics' },
+              { id: 'prov_3', name: 'Dr. John Wilson', speciality: 'Oral Surgery' }
+            ]
+          }
+          break
+          
+        case 'locations':
+        case 'listLocations':
+          result = { 
+            locations: [
+              { id: 'loc_1', name: 'Main Office', address: '123 Main St, Demo City' },
+              { id: 'loc_2', name: 'North Branch', address: '456 North Ave, Demo City' }
+            ]
+          }
+          break
+          
+        case 'search_patient':
+        case 'searchPatientByPhone':
+          result = { 
+            message: 'Patient search functionality available',
+            patients: [
+              { 
+                id: 'pat_1', 
+                firstName: 'Demo', 
+                lastName: 'Patient',
+                phone: '+1234567890',
+                email: 'demo@example.com'
+              }
+            ]
+          }
+          break
+          
+        default:
+          return json({ error: `Unknown action: ${action}` }, 400)
       }
+
+      const endTime = Date.now()
+      const latency = endTime - startTime
+
+      return json({ 
+        success: true, 
+        data: result,
+        latency: `${latency}ms`,
+        timestamp: new Date().toISOString()
+      })
     }
 
-    return new Response(
-      JSON.stringify({ 
-        success: true, 
-        office: office,
-        testResults: results,
-        summary: {
-          total: results.length,
-          passed: results.filter(r => !r.error).length,
-          failed: results.filter(r => r.error).length
-        }
-      }),
-      { 
-        headers: { 
-          ...corsHeaders,
-          'Content-Type': 'application/json'
-        } 
+    // For non-dummy PMS types, call the actual integration
+    const integrationResponse = await supabaseClient.functions.invoke('pms-integrations', {
+      body: {
+        action: action === 'ping' ? 'listProviders' : action, // Convert ping to a real action
+        officeId: office_id
       }
-    )
+    })
+
+    if (integrationResponse.error) {
+      return json({ 
+        error: `Integration failed: ${integrationResponse.error.message}`,
+        details: integrationResponse.error
+      }, 400)
+    }
+
+    return json({
+      success: true,
+      data: integrationResponse.data,
+      timestamp: new Date().toISOString()
+    })
 
   } catch (error) {
     console.error('PMS Test Error:', error)
-    return new Response(
-      JSON.stringify({ 
-        success: false, 
-        error: error.message 
-      }),
-      { 
-        status: 400,
-        headers: { 
-          ...corsHeaders,
-          'Content-Type': 'application/json'
-        } 
-      }
-    )
+    return json({ 
+      error: String(error), 
+      stack: error?.stack 
+    }, 400)
   }
 })
