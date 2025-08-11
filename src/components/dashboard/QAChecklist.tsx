@@ -303,7 +303,7 @@ export const QAChecklist = () => {
         .from('calls')
         .insert({
           clinic_id: profile.clinic_id,
-          outcome: 'qa_test_simulation',
+          outcome: 'completed',
           transcript_json: { test: true, qa_check: true }
         })
         .select()
