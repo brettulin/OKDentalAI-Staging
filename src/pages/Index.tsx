@@ -1,10 +1,10 @@
 import { Layout } from '@/components/Layout';
-import { ClinicSetup } from '@/components/dashboard/ClinicSetup';
+import { SetupTabs } from '@/components/dashboard/SetupTabs';
 
 const Index = () => {
   return (
     <Layout>
-      <ClinicSetup />
+      <SetupTabs />
     </Layout>
   );
 };

@@ -331,9 +331,18 @@ export const ClinicSetup = () => {
 
   return (
     <div className="p-6 space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">{clinic.name}</h1>
-        <p className="text-muted-foreground">{clinic.main_phone}</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold">{clinic.name}</h1>
+          <p className="text-muted-foreground">{clinic.main_phone}</p>
+        </div>
+        <div className="text-right">
+          <p className="text-sm text-muted-foreground">Setup Progress</p>
+          <div className="flex gap-2 mt-1">
+            <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">✓ Clinic Created</span>
+            <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">→ Next: PMS Integration</span>
+          </div>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
