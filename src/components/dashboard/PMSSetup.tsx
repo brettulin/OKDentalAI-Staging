@@ -77,6 +77,7 @@ export const PMSSetup = () => {
         clinic_id: profile.clinic_id
       });
 
+      // Reset form
       setOfficeForm({
         name: '',
         pms_type: '',
@@ -85,7 +86,7 @@ export const PMSSetup = () => {
 
       toast({
         title: "Success",
-        description: "PMS integration created successfully!",
+        description: "PMS integration saved successfully!",
       });
     } catch (error) {
       toast({

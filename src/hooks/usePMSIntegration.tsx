@@ -16,12 +16,25 @@ export function usePMSIntegration() {
   const queryClient = useQueryClient();
 
   // Get offices for current clinic
-  const { data: offices, isLoading: officesLoading } = useQuery({
+  const { data: offices, isLoading: officesLoading, refetch: refetchOffices } = useQuery({
     queryKey: ['offices'],
     queryFn: async () => {
+      // Get current user's clinic_id
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Not authenticated');
+
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('clinic_id')
+        .eq('user_id', user.id)
+        .single();
+
+      if (!profile?.clinic_id) throw new Error('No clinic found');
+
       const { data, error } = await supabase
         .from('offices')
         .select('*')
+        .eq('clinic_id', profile.clinic_id)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -32,6 +45,24 @@ export function usePMSIntegration() {
   // Create or update office (upsert to prevent duplicates)
   const createOfficeMutation = useMutation({
     mutationFn: async (officeData: OfficeInsert) => {
+      // Clean up any existing duplicate records first
+      const { data: existing } = await supabase
+        .from('offices')
+        .select('id')
+        .eq('clinic_id', officeData.clinic_id!)
+        .eq('name', officeData.name);
+
+      if (existing && existing.length > 1) {
+        // Keep the first one, delete the rest
+        const toDelete = existing.slice(1).map(office => office.id);
+        if (toDelete.length > 0) {
+          await supabase
+            .from('offices')
+            .delete()
+            .in('id', toDelete);
+        }
+      }
+
       const { data, error } = await supabase
         .from('offices')
         .upsert(officeData, {
@@ -46,6 +77,7 @@ export function usePMSIntegration() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['offices'] });
+      refetchOffices();
     },
   });
 
@@ -63,6 +95,7 @@ export function usePMSIntegration() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['offices'] });
+      refetchOffices();
     },
   });
 
