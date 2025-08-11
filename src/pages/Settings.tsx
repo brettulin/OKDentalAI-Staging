@@ -1,8 +1,9 @@
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/EmptyState';
 import { useAuth } from '@/hooks/useAuth';
-import { Settings as SettingsIcon } from 'lucide-react';
+import { Settings as SettingsIcon, Bot, ChevronRight } from 'lucide-react';
 
 const SettingsPage = () => {
   const { user } = useAuth();
@@ -28,19 +29,45 @@ const SettingsPage = () => {
         </div>
       </div>
       
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <SettingsIcon className="h-5 w-5" />
-            Clinic Configuration
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-muted-foreground">
-            Settings and configuration options will be implemented here.
-          </p>
-        </CardContent>
-      </Card>
+      <div className="grid gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <SettingsIcon className="h-5 w-5" />
+              Clinic Configuration
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-muted-foreground mb-4">
+              Manage your clinic's general settings and preferences.
+            </p>
+            <Button variant="outline" disabled>
+              General Settings (Coming Soon)
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Bot className="h-5 w-5" />
+              AI Receptionist
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-muted-foreground mb-4">
+              Configure your AI receptionist's voice, behavior, and booking policies.
+            </p>
+            <Button 
+              onClick={() => window.location.href = '/settings/ai'}
+              className="flex items-center gap-2"
+            >
+              Configure AI Settings
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 };

@@ -63,52 +63,72 @@ serve(async (req) => {
 
     console.log(`Office found: ${office.name}, PMS type: ${office.pms_type}`)
 
-    // Dummy adapter: return hardcoded 200s
+    // Dummy adapter: return hardcoded successful responses
     if (office.pms_type === "dummy") {
       console.log(`Handling dummy PMS action: ${action}`)
       
       const startTime = Date.now();
       let result;
 
-      if (action === "ping" || action === "connection") {
-        result = { ok: true, system: "dummy", timestamp: new Date().toISOString() };
-      } else if (action === "providers" || action === "listProviders") {
-        result = { 
-          providers: [
-            { id: "prov_1", name: "Dr. Demo Smith", specialty: "General Dentistry" },
-            { id: "prov_2", name: "Dr. Jane Doe", specialty: "Orthodontics" }
-          ] 
-        };
-      } else if (action === "locations" || action === "listLocations") {
-        result = { 
-          locations: [
-            { id: "loc_1", name: "Main Office", address: "123 Main St" },
-            { id: "loc_2", name: "North Branch", address: "456 North Ave" }
-          ] 
-        };
-      } else if (action === "search_patient" || action === "searchPatientByPhone") {
-        result = { 
-          message: "Patient search functionality available",
-          patients: [
-            { id: "pat_1", firstName: "Demo", lastName: "Patient", phone: "+1234567890" }
-          ]
-        };
-      } else {
-        return json({ error: "unknown_action", action, supported_actions: ["ping", "connection", "providers", "locations", "search_patient"] }, 400);
+      try {
+        if (action === "ping" || action === "connection") {
+          result = { ok: true, system: "dummy", timestamp: new Date().toISOString(), status: "connected" };
+        } else if (action === "providers" || action === "listProviders") {
+          result = { 
+            success: true,
+            providers: [
+              { id: "prov_1", name: "Dr. Demo Smith", specialty: "General Dentistry" },
+              { id: "prov_2", name: "Dr. Jane Doe", specialty: "Orthodontics" },
+              { id: "prov_3", name: "Dr. Mike Wilson", specialty: "Oral Surgery" }
+            ] 
+          };
+        } else if (action === "locations" || action === "listLocations") {
+          result = { 
+            success: true,
+            locations: [
+              { id: "loc_1", name: "Main Office", address: "123 Main St, City" },
+              { id: "loc_2", name: "North Branch", address: "456 North Ave, City" }
+            ] 
+          };
+        } else if (action === "search_patient" || action === "searchPatientByPhone") {
+          result = { 
+            success: true,
+            message: "Patient search functionality available",
+            patients: [
+              { id: "pat_1", firstName: "Demo", lastName: "Patient", phone: "+1234567890" }
+            ]
+          };
+        } else {
+          result = { 
+            success: false, 
+            error: "unknown_action", 
+            action, 
+            supported_actions: ["ping", "connection", "providers", "locations", "search_patient"] 
+          };
+        }
+
+        const endTime = Date.now();
+        const latency = endTime - startTime;
+
+        console.log(`Dummy PMS action '${action}' completed in ${latency}ms`)
+        
+        return json({ 
+          success: true,
+          data: result,
+          latency: `${latency}ms`,
+          timestamp: new Date().toISOString(),
+          office: { id: office.id, name: office.name, pms_type: office.pms_type }
+        });
+      } catch (dummyError) {
+        console.error(`Dummy PMS error for action '${action}':`, dummyError);
+        return json({ 
+          success: false,
+          error: "dummy_processing_failed", 
+          action,
+          message: String(dummyError),
+          timestamp: new Date().toISOString()
+        }, 500);
       }
-
-      const endTime = Date.now();
-      const latency = endTime - startTime;
-
-      console.log(`Dummy PMS action '${action}' completed in ${latency}ms`)
-      
-      return json({ 
-        success: true,
-        data: result,
-        latency: `${latency}ms`,
-        timestamp: new Date().toISOString(),
-        office: { id: office.id, name: office.name, pms_type: office.pms_type }
-      });
     }
 
     // For non-dummy, bail for now

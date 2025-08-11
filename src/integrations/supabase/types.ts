@@ -14,6 +14,42 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_settings: {
+        Row: {
+          booking_policy: Json | null
+          clinic_id: string
+          created_at: string
+          id: string
+          language: string | null
+          transfer_number: string | null
+          updated_at: string
+          voice_model: string | null
+          voice_provider: string | null
+        }
+        Insert: {
+          booking_policy?: Json | null
+          clinic_id: string
+          created_at?: string
+          id?: string
+          language?: string | null
+          transfer_number?: string | null
+          updated_at?: string
+          voice_model?: string | null
+          voice_provider?: string | null
+        }
+        Update: {
+          booking_policy?: Json | null
+          clinic_id?: string
+          created_at?: string
+          id?: string
+          language?: string | null
+          transfer_number?: string | null
+          updated_at?: string
+          voice_model?: string | null
+          voice_provider?: string | null
+        }
+        Relationships: []
+      }
       appointments: {
         Row: {
           clinic_id: string
