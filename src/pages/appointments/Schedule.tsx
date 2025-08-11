@@ -25,6 +25,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { BookingInterface } from "@/components/appointments/BookingInterface";
+import { SlotGenerator } from "@/components/appointments/SlotGenerator";
 
 export default function Schedule() {
   const { profile } = useAuth();
@@ -187,10 +188,11 @@ export default function Schedule() {
             Manage appointments and available time slots
           </p>
         </div>
-        <Button>
-          <Plus className="w-4 h-4 mr-2" />
-          Create Slot
-        </Button>
+        <SlotGenerator 
+          onSlotsGenerated={() => {
+            queryClient.invalidateQueries({ queryKey: ['schedule'] });
+          }} 
+        />
       </div>
 
       {/* Filters */}

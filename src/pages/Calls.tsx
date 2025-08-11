@@ -4,12 +4,13 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { EmptyState } from '@/components/EmptyState';
-import { Phone, Filter, Eye, Clock, User } from 'lucide-react';
+import { Phone, Filter, Eye, Clock, User, Download } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { CallThreadDrawer } from '@/components/calls/CallThreadDrawer';
+import CallsExport from '@/pages/calls/CallsExport';
 import { formatDistanceToNow } from 'date-fns';
 
 const CallsPage = () => {
@@ -225,23 +226,37 @@ const CallsPage = () => {
           <h1 className="text-2xl font-semibold">Live Call Monitor</h1>
           <p className="text-muted-foreground">Track and manage your AI receptionist calls in real-time</p>
         </div>
-        <div className="flex items-center gap-2">
-          <Filter className="h-4 w-4 text-muted-foreground" />
-          <Select value={outcomeFilter} onValueChange={setOutcomeFilter}>
-            <SelectTrigger className="w-[180px]">
-              <SelectValue placeholder="Filter by outcome" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All calls</SelectItem>
-              <SelectItem value="ongoing">Ongoing</SelectItem>
-              <SelectItem value="appointment_booked">Appointments booked</SelectItem>
-              <SelectItem value="transferred">Transferred</SelectItem>
-              <SelectItem value="voicemail">Voicemail</SelectItem>
-              <SelectItem value="completed">Completed</SelectItem>
-              <SelectItem value="cancelled">Cancelled</SelectItem>
-            </SelectContent>
-          </Select>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <Filter className="h-4 w-4 text-muted-foreground" />
+            <Select value={outcomeFilter} onValueChange={setOutcomeFilter}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Filter by outcome" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All calls</SelectItem>
+                <SelectItem value="ongoing">Ongoing</SelectItem>
+                <SelectItem value="appointment_booked">Appointments booked</SelectItem>
+                <SelectItem value="transferred">Transferred</SelectItem>
+                <SelectItem value="voicemail">Voicemail</SelectItem>
+                <SelectItem value="completed">Completed</SelectItem>
+                <SelectItem value="cancelled">Cancelled</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <Button 
+            variant="outline" 
+            onClick={() => window.open('/calls/export', '_blank')}
+            className="gap-2"
+          >
+            <Download className="h-4 w-4" />
+            Export CSV
+          </Button>
         </div>
+      </div>
+
+      <div className="mb-6">
+        <CallsExport />
       </div>
 
       <div className="space-y-4">

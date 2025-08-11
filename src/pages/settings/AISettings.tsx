@@ -92,11 +92,14 @@ const AISettingsPage = () => {
     voice_model: settings?.voice_model || 'eleven_multilingual_v2',
     language: settings?.language || 'en',
     transfer_number: settings?.transfer_number || '',
+    greeting: '', // Add greeting field
     booking_policy: settings?.booking_policy || {},
     auto_booking_enabled: (settings?.booking_policy as any)?.auto_booking_enabled || false,
     require_insurance: (settings?.booking_policy as any)?.require_insurance || false,
     max_advance_days: (settings?.booking_policy as any)?.max_advance_days || 30,
   });
+
+  const [testGreeting, setTestGreeting] = useState('');
 
   React.useEffect(() => {
     if (settings) {
@@ -106,6 +109,7 @@ const AISettingsPage = () => {
         voice_model: settings.voice_model || 'eleven_multilingual_v2',
         language: settings.language || 'en',
         transfer_number: settings.transfer_number || '',
+        greeting: (settings.booking_policy as any)?.greeting || '',
         booking_policy: settings.booking_policy || {},
         auto_booking_enabled: bookingPolicy.auto_booking_enabled || false,
         require_insurance: bookingPolicy.require_insurance || false,
@@ -126,6 +130,7 @@ const AISettingsPage = () => {
         auto_booking_enabled: formData.auto_booking_enabled,
         require_insurance: formData.require_insurance,
         max_advance_days: formData.max_advance_days,
+        greeting: formData.greeting,
       }
     };
 
@@ -231,6 +236,42 @@ const AISettingsPage = () => {
                   placeholder="+1234567890"
                   type="tel"
                 />
+              </div>
+            </div>
+
+            <div>
+              <Label htmlFor="greeting">Custom Greeting</Label>
+              <Textarea
+                id="greeting"
+                value={formData.greeting}
+                onChange={(e) => setFormData(prev => ({ ...prev, greeting: e.target.value }))}
+                placeholder="Hello! Thank you for calling our dental office. How can I assist you today?"
+                rows={3}
+              />
+              <p className="text-sm text-muted-foreground mt-1">
+                This greeting will be used when the AI answers calls. If empty, a default greeting will be used.
+              </p>
+              <div className="mt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const greeting = formData.greeting || "Hello! Thank you for calling our dental office. How can I assist you today?";
+                    const languageText = formData.language === 'es' ? 'Spanish' : 
+                                        formData.language === 'fr' ? 'French' : 
+                                        formData.language === 'de' ? 'German' : 
+                                        formData.language === 'it' ? 'Italian' : 'English';
+                    setTestGreeting(`${greeting} (Language: ${languageText})`);
+                  }}
+                >
+                  Test Greeting Preview
+                </Button>
+                {testGreeting && (
+                  <div className="mt-2 p-3 bg-muted rounded-lg text-sm">
+                    <strong>Preview:</strong> {testGreeting}
+                  </div>
+                )}
               </div>
             </div>
           </CardContent>

@@ -40,12 +40,23 @@ serve(async (req) => {
 
     switch (type) {
       case 'simulate_call': {
-        // Get clinic info for context
+        // Get clinic info and AI settings for context
         const { data: clinic } = await supabase
           .from('clinics')
           .select('name, main_phone, timezone')
           .eq('id', authContext.clinic_id)
           .single();
+
+        const { data: aiSettings } = await supabase
+          .from('ai_settings')
+          .select('language, booking_policy')
+          .eq('clinic_id', authContext.clinic_id)
+          .maybeSingle();
+
+        const greeting = (aiSettings?.booking_policy as any)?.greeting || 
+                        `Hello! Thank you for calling ${clinic?.name || 'our dental office'}. How can I assist you today?`;
+        
+        const language = aiSettings?.language || 'en';
 
         // Create a simulated call with realistic conversation
         const callData = {
@@ -78,7 +89,7 @@ serve(async (req) => {
         const scenarios = {
           appointment_booking: [
             { role: 'user', text: 'Hi, I need to book a dental appointment' },
-            { role: 'assistant', text: `Hello! Thank you for calling ${clinic?.name || 'our dental office'}. I'd be happy to help you schedule an appointment. May I have your name and phone number?` },
+            { role: 'assistant', text: greeting },
             { role: 'user', text: 'Sure, it\'s John Smith, 555-123-4567' },
             { role: 'assistant', text: 'Thank you, Mr. Smith. I found your information. What type of appointment do you need?' },
             { role: 'user', text: 'Just a regular cleaning and checkup' },
@@ -191,16 +202,33 @@ serve(async (req) => {
               .select('*')
               .eq('clinic_id', authContext.clinic_id);
 
-            const systemPrompt = `You are an AI dental office receptionist. You are helpful, professional, and efficient. Your main tasks are:
+            // Get AI settings for language and greeting
+            const { data: aiSettings } = await supabase
+              .from('ai_settings')
+              .select('language, booking_policy, transfer_number')
+              .eq('clinic_id', authContext.clinic_id)
+              .maybeSingle();
+
+            const language = aiSettings?.language || 'en';
+            const customGreeting = (aiSettings?.booking_policy as any)?.greeting;
+            const transferNumber = aiSettings?.transfer_number;
+
+            const languageInstructions = language !== 'en' ? 
+              `\n\nIMPORTANT: Always respond in ${getLanguageName(language)}. All your responses must be in ${getLanguageName(language)}.` : '';
+
+            const systemPrompt = `You are an AI dental office receptionist for ${clinic?.name || 'the dental office'}. You are helpful, professional, and efficient. Your main tasks are:
 1. Schedule appointments for patients
 2. Answer questions about dental services
 3. Handle emergency requests
 4. Collect patient information
 5. Transfer calls to human staff when needed
 
+${customGreeting ? `Use this greeting when starting conversations: "${customGreeting}"` : ''}
+${transferNumber ? `When transferring calls, use this number: ${transferNumber}` : ''}
+
 Current clinic hours: ${clinicHours?.map(h => `${getDayName(h.dow)}: ${formatTime(h.open_min)} - ${formatTime(h.close_min)}`).join(', ') || 'Not specified'}
 
-Keep responses concise and friendly. If booking appointments, ask for name, phone, and preferred times. For emergencies, prioritize urgent scheduling.
+Keep responses concise and friendly. If booking appointments, ask for name, phone, and preferred times. For emergencies, prioritize urgent scheduling.${languageInstructions}
 
 Available intents to classify user requests:
 - appointment_booking: User wants to schedule a new appointment
@@ -424,6 +452,17 @@ Always classify the user's intent in your response metadata.`;
     );
   }
 });
+
+function getLanguageName(code: string): string {
+  const languages: { [key: string]: string } = {
+    'en': 'English',
+    'es': 'Spanish',
+    'fr': 'French',
+    'de': 'German',
+    'it': 'Italian'
+  };
+  return languages[code] || 'English';
+}
 
 function generateFallbackResponse(userMessage: string): string {
   const lowerMessage = userMessage.toLowerCase();

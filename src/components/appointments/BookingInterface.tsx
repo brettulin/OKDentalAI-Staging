@@ -9,8 +9,16 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
-import { Calendar, Clock, User, MapPin, Stethoscope, Plus } from 'lucide-react';
+import { Calendar, Clock, User, MapPin, Stethoscope, Plus, ExternalLink } from 'lucide-react';
 import { format, addDays } from 'date-fns';
+import { PatientSelector } from '@/components/ui/patient-selector';
+
+interface Patient {
+  id: string;
+  full_name: string;
+  phone: string;
+  email?: string;
+}
 
 interface BookingInterfaceProps {
   onAppointmentBooked?: (appointment: any) => void;
@@ -25,12 +33,8 @@ export function BookingInterface({ onAppointmentBooked }: BookingInterfaceProps)
   const [selectedService, setSelectedService] = useState('');
   const [selectedLocation, setSelectedLocation] = useState('');
   const [selectedSlot, setSelectedSlot] = useState('');
-  const [patientInfo, setPatientInfo] = useState({
-    name: '',
-    phone: '',
-    email: '',
-    isNewPatient: false
-  });
+  const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
+  const [lastBookedAppointment, setLastBookedAppointment] = useState<any>(null);
 
   // Get user's clinic
   const { data: profile } = useQuery({
@@ -96,25 +100,29 @@ export function BookingInterface({ onAppointmentBooked }: BookingInterfaceProps)
     enabled: !!profile?.clinic_id,
   });
 
-  // Fetch available slots
+  // Fetch available slots with proper filtering
   const { data: availableSlots } = useQuery({
-    queryKey: ['slots', profile?.clinic_id, selectedProvider, selectedLocation],
+    queryKey: ['available-slots', profile?.clinic_id, selectedProvider, selectedLocation],
     queryFn: async () => {
       if (!profile?.clinic_id || !selectedProvider) return [];
       
       const tomorrow = addDays(new Date(), 1);
       const weekLater = addDays(new Date(), 8);
       
-      const { data, error } = await supabase
+      let query = supabase
         .from('slots')
         .select('*')
         .eq('clinic_id', profile.clinic_id)
         .eq('provider_id', selectedProvider)
         .eq('status', 'open')
         .gte('starts_at', tomorrow.toISOString())
-        .lte('starts_at', weekLater.toISOString())
-        .order('starts_at');
+        .lte('starts_at', weekLater.toISOString());
+
+      if (selectedLocation) {
+        query = query.eq('location_id', selectedLocation);
+      }
         
+      const { data, error } = await query.order('starts_at');
       if (error) throw error;
       return data;
     },
@@ -126,35 +134,12 @@ export function BookingInterface({ onAppointmentBooked }: BookingInterfaceProps)
     mutationFn: async (appointmentData: any) => {
       if (!profile?.clinic_id) throw new Error('No clinic found');
       
-      // First, find or create patient
-      let patientId = null;
-      
-      // Check if patient exists
-      const { data: existingPatient } = await supabase
-        .from('patients')
-        .select('id')
-        .eq('clinic_id', profile.clinic_id)
-        .eq('phone', patientInfo.phone)
-        .maybeSingle();
-      
-      if (existingPatient) {
-        patientId = existingPatient.id;
-      } else {
-        // Create new patient
-        const { data: newPatient, error: patientError } = await supabase
-          .from('patients')
-          .insert({
-            clinic_id: profile.clinic_id,
-            full_name: patientInfo.name,
-            phone: patientInfo.phone,
-            email: patientInfo.email || null,
-          })
-          .select('id')
-          .single();
-          
-        if (patientError) throw patientError;
-        patientId = newPatient.id;
+      // Get patient ID (either selected or newly created)
+      if (!selectedPatient) {
+        throw new Error('No patient selected');
       }
+      
+      const patientId = selectedPatient.id;
       
       // Get slot details
       const { data: slot, error: slotError } = await supabase
@@ -176,7 +161,7 @@ export function BookingInterface({ onAppointmentBooked }: BookingInterfaceProps)
           location_id: selectedLocation || null,
           starts_at: slot.starts_at,
           ends_at: slot.ends_at,
-          source: 'ai_booking'
+          source: 'manual'
         })
         .select('*')
         .single();
@@ -241,7 +226,7 @@ export function BookingInterface({ onAppointmentBooked }: BookingInterfaceProps)
           action: 'appointment.booked',
           actor: 'ai_booking',
           diff_json: { 
-            patient_name: patientInfo.name,
+            patient_name: selectedPatient.full_name,
             provider_id: selectedProvider,
             service_id: selectedService,
             slot_id: selectedSlot,
@@ -252,6 +237,7 @@ export function BookingInterface({ onAppointmentBooked }: BookingInterfaceProps)
       return { ...appointment, sync_status: syncStatus };
     },
     onSuccess: (appointment) => {
+      setLastBookedAppointment(appointment);
       toast({
         title: "Appointment Booked!",
         description: `Appointment scheduled for ${format(new Date(appointment.starts_at), 'PPP p')}`,
@@ -262,11 +248,13 @@ export function BookingInterface({ onAppointmentBooked }: BookingInterfaceProps)
       setSelectedService('');
       setSelectedLocation('');
       setSelectedSlot('');
-      setPatientInfo({ name: '', phone: '', email: '', isNewPatient: false });
+      setSelectedPatient(null);
       
       // Refresh data
       queryClient.invalidateQueries({ queryKey: ['slots'] });
+      queryClient.invalidateQueries({ queryKey: ['available-slots'] });
       queryClient.invalidateQueries({ queryKey: ['appointments'] });
+      queryClient.invalidateQueries({ queryKey: ['schedule'] });
       
       // Notify parent component
       onAppointmentBooked?.(appointment);
@@ -280,11 +268,42 @@ export function BookingInterface({ onAppointmentBooked }: BookingInterfaceProps)
     },
   });
 
+  const handlePatientCreate = async (patientData: { name: string; phone: string; email?: string }) => {
+    if (!profile?.clinic_id) return;
+
+    try {
+      const { data: newPatient, error } = await supabase
+        .from('patients')
+        .insert({
+          clinic_id: profile.clinic_id,
+          full_name: patientData.name,
+          phone: patientData.phone,
+          email: patientData.email || null,
+        })
+        .select('id, full_name, phone, email')
+        .single();
+
+      if (error) throw error;
+      
+      setSelectedPatient(newPatient as Patient);
+      toast({
+        title: "Patient Created",
+        description: `${newPatient.full_name} has been added to your patient database`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: `Failed to create patient: ${error.message}`,
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleBookAppointment = () => {
-    if (!selectedProvider || !selectedService || !selectedSlot || !patientInfo.name || !patientInfo.phone) {
+    if (!selectedProvider || !selectedService || !selectedSlot || !selectedPatient) {
       toast({
         title: "Missing Information",
-        description: "Please fill in all required fields",
+        description: "Please select all required fields including a patient",
         variant: "destructive",
       });
       return;
@@ -293,7 +312,7 @@ export function BookingInterface({ onAppointmentBooked }: BookingInterfaceProps)
     bookAppointmentMutation.mutate({});
   };
 
-  const isFormValid = selectedProvider && selectedService && selectedSlot && patientInfo.name && patientInfo.phone;
+  const isFormValid = selectedProvider && selectedService && selectedSlot && selectedPatient;
 
   return (
     <div className="space-y-6">
@@ -305,43 +324,40 @@ export function BookingInterface({ onAppointmentBooked }: BookingInterfaceProps)
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
-          {/* Patient Information */}
-          <div className="space-y-4">
-            <div className="flex items-center gap-2 mb-3">
-              <User className="h-4 w-4" />
-              <Label className="text-sm font-medium">Patient Information</Label>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="name">Full Name *</Label>
-                <Input
-                  id="name"
-                  value={patientInfo.name}
-                  onChange={(e) => setPatientInfo(prev => ({ ...prev, name: e.target.value }))}
-                  placeholder="Enter patient name"
-                />
-              </div>
-              <div>
-                <Label htmlFor="phone">Phone Number *</Label>
-                <Input
-                  id="phone"
-                  value={patientInfo.phone}
-                  onChange={(e) => setPatientInfo(prev => ({ ...prev, phone: e.target.value }))}
-                  placeholder="(555) 123-4567"
-                />
-              </div>
-              <div>
-                <Label htmlFor="email">Email (Optional)</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={patientInfo.email}
-                  onChange={(e) => setPatientInfo(prev => ({ ...prev, email: e.target.value }))}
-                  placeholder="patient@example.com"
-                />
+          {/* Success Message */}
+          {lastBookedAppointment && (
+            <div className="p-4 bg-green-50 border border-green-200 rounded-lg space-y-3">
+              <h4 className="font-medium text-green-800">Appointment Successfully Booked!</h4>
+              <p className="text-sm text-green-700">
+                Appointment for {selectedPatient?.full_name} on {format(new Date(lastBookedAppointment.starts_at), 'PPP p')}
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => window.open(`/patients/${selectedPatient?.id}`, '_blank')}
+                  className="gap-2"
+                >
+                  <ExternalLink className="h-3 w-3" />
+                  View Patient
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setLastBookedAppointment(null)}
+                >
+                  Book Another
+                </Button>
               </div>
             </div>
-          </div>
+          )}
+
+          {/* Patient Selection */}
+          <PatientSelector
+            selectedPatient={selectedPatient}
+            onPatientSelect={setSelectedPatient}
+            onCreateNew={handlePatientCreate}
+          />
 
           {/* Provider Selection */}
           <div className="space-y-3">

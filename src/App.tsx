@@ -35,6 +35,7 @@ function App() {
                 <Route path="/appointments/schedule" element={<ErrorBoundary><Schedule /></ErrorBoundary>} />
                 <Route path="/calls" element={<ErrorBoundary><Calls /></ErrorBoundary>} />
                 <Route path="/calls/:id" element={<ErrorBoundary><CallDetails /></ErrorBoundary>} />
+                <Route path="/calls/export" element={<ErrorBoundary><CallsExport /></ErrorBoundary>} />
                 <Route path="/settings" element={<ErrorBoundary><Settings /></ErrorBoundary>} />
                 <Route path="/settings/ai" element={<ErrorBoundary><AISettings /></ErrorBoundary>} />
                 <Route path="/pms" element={<ErrorBoundary><PMS /></ErrorBoundary>} />
