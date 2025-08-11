@@ -135,6 +135,7 @@ export type Database = {
           clinic_id: string
           ended_at: string | null
           id: string
+          office_id: string | null
           outcome: string | null
           started_at: string
           transcript_json: Json | null
@@ -144,6 +145,7 @@ export type Database = {
           clinic_id: string
           ended_at?: string | null
           id?: string
+          office_id?: string | null
           outcome?: string | null
           started_at?: string
           transcript_json?: Json | null
@@ -153,6 +155,7 @@ export type Database = {
           clinic_id?: string
           ended_at?: string | null
           id?: string
+          office_id?: string | null
           outcome?: string | null
           started_at?: string
           transcript_json?: Json | null
@@ -164,6 +167,13 @@ export type Database = {
             columns: ["clinic_id"]
             isOneToOne: false
             referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "calls_office_id_fkey"
+            columns: ["office_id"]
+            isOneToOne: false
+            referencedRelation: "offices"
             referencedColumns: ["id"]
           },
         ]
@@ -296,6 +306,36 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      offices: {
+        Row: {
+          clinic_id: string
+          created_at: string
+          id: string
+          name: string
+          pms_credentials: Json | null
+          pms_type: string
+          updated_at: string
+        }
+        Insert: {
+          clinic_id: string
+          created_at?: string
+          id?: string
+          name: string
+          pms_credentials?: Json | null
+          pms_type: string
+          updated_at?: string
+        }
+        Update: {
+          clinic_id?: string
+          created_at?: string
+          id?: string
+          name?: string
+          pms_credentials?: Json | null
+          pms_type?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       patients: {
         Row: {
