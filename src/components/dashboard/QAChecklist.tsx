@@ -268,7 +268,7 @@ export const QAChecklist = () => {
       try {
         const { data, error } = await supabase.functions.invoke('pms-test', {
           body: {
-            action: 'listProviders',
+            action: 'connectionTest',
             office_id: offices[0].id
           }
         });
@@ -592,7 +592,7 @@ export const QAChecklist = () => {
 
       return new Promise((resolve) => {
         let resolved = false;
-        const testId = crypto.randomUUID(); // Generate proper UUID
+        const testId = crypto.randomUUID();
         
         // Set up realtime subscription test
         const channel = supabase
@@ -615,38 +615,38 @@ export const QAChecklist = () => {
               }
             }
           )
-          .subscribe();
+          .subscribe((status) => {
+            // Wait for subscription to be ready before inserting
+            if (status === 'SUBSCRIBED') {
+              setTimeout(async () => {
+                try {
+                  const { error } = await supabase
+                    .from('calls')
+                    .insert({
+                      clinic_id: profile.clinic_id,
+                      outcome: 'completed',
+                      transcript_json: { qa_realtime_test: testId }
+                    });
 
-        // Insert test record after subscription is set up
-        setTimeout(async () => {
-          try {
-            const { error } = await supabase
-              .from('calls')
-              .insert({
-                clinic_id: profile.clinic_id,
-                outcome: 'completed',
-                transcript_json: { qa_realtime_test: testId }
-              });
-
-            if (error) {
-              if (!resolved) {
-                resolved = true;
-                supabase.removeChannel(channel);
-                updateCheck('realtime', 'fail', `Failed to insert test record: ${error.message}`);
-                resolve(false);
-              }
+                  if (error && !resolved) {
+                    resolved = true;
+                    supabase.removeChannel(channel);
+                    updateCheck('realtime', 'fail', `Failed to insert: ${error.message}`);
+                    resolve(false);
+                  }
+                } catch (insertError) {
+                  if (!resolved) {
+                    resolved = true;
+                    supabase.removeChannel(channel);
+                    updateCheck('realtime', 'fail', `Insert error: ${insertError instanceof Error ? insertError.message : 'Unknown error'}`);
+                    resolve(false);
+                  }
+                }
+              }, 500); // Shorter delay after subscription is ready
             }
-          } catch (insertError) {
-            if (!resolved) {
-              resolved = true;
-              supabase.removeChannel(channel);
-              updateCheck('realtime', 'fail', `Insert error: ${insertError instanceof Error ? insertError.message : 'Unknown error'}`);
-              resolve(false);
-            }
-          }
-        }, 1000);
+          });
 
-        // Timeout after 5 seconds
+        // Timeout after 8 seconds (longer to account for subscription setup)
         setTimeout(() => {
           if (!resolved) {
             resolved = true;
@@ -654,7 +654,7 @@ export const QAChecklist = () => {
             updateCheck('realtime', 'fail', 'Real-time subscription timeout');
             resolve(false);
           }
-        }, 5000);
+        }, 8000);
       });
     } catch (error) {
       updateCheck('realtime', 'fail', `Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
