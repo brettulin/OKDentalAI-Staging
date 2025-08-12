@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { CallSimulator } from '@/components/ai/CallSimulator';
+import { RealtimeVoiceInterface } from '@/components/ai/RealtimeVoiceInterface';
 import { usePMSIntegration } from '@/hooks/usePMSIntegration';
 import { useAICallHandler } from '@/hooks/useAICallHandler';
 import { Phone, Settings, TestTube, Activity } from 'lucide-react';
@@ -100,10 +101,14 @@ export function AIReceptionistDashboard() {
       </div>
 
       <Tabs defaultValue="simulator" className="space-y-6">
-        <TabsList>
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="simulator" className="gap-2">
             <Phone className="h-4 w-4" />
             Call Simulator
+          </TabsTrigger>
+          <TabsTrigger value="realtime" className="gap-2">
+            <Phone className="h-4 w-4" />
+            Realtime Voice AI
           </TabsTrigger>
           <TabsTrigger value="analytics" className="gap-2">
             <Activity className="h-4 w-4" />
@@ -127,6 +132,10 @@ export function AIReceptionistDashboard() {
               </CardContent>
             </Card>
           )}
+        </TabsContent>
+
+        <TabsContent value="realtime">
+          <RealtimeVoiceInterface />
         </TabsContent>
 
         <TabsContent value="analytics">
