@@ -1,64 +1,76 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Mic, MicOff, Phone, PhoneOff, Send, Volume2, Bot, User } from 'lucide-react';
 import { useAICallHandler } from '@/hooks/useAICallHandler';
-import { usePMSIntegration } from '@/hooks/usePMSIntegration';
-import { Phone, PhoneOff, Send, Bot, User } from 'lucide-react';
+import { useVoiceInterface } from '@/hooks/useVoiceInterface';
+import { Badge } from '@/components/ui/badge';
+import { useToast } from '@/components/ui/use-toast';
 
 interface CallSimulatorProps {
   officeId: string;
 }
 
 export function CallSimulator({ officeId }: CallSimulatorProps) {
+  const { toast } = useToast();
   const [callId, setCallId] = useState<string | null>(null);
   const [currentMessage, setCurrentMessage] = useState('');
-  const [conversationHistory, setConversationHistory] = useState<any[]>([]);
-  const [callContext, setCallContext] = useState<any>({});
-  
-  const { 
-    startCall, 
-    endCall, 
-    processMessage, 
-    useCallHistory,
+  const [useVoice, setUseVoice] = useState(false);
+  const [conversationHistory, setConversationHistory] = useState<Array<{
+    speaker: 'user' | 'ai';
+    message: string;
+    timestamp: string;
+  }>>([]);
+  const [callContext, setCallContext] = useState<any>(null);
+
+  const {
+    startCall,
+    endCall,
+    processMessage,
     isStartingCall,
-    isProcessingMessage,
-    isEndingCall 
+    isEndingCall,
+    isProcessingMessage
   } = useAICallHandler();
 
-  const { data: callHistory } = useCallHistory(callId || '');
+  const {
+    isRecording,
+    isPlaying,
+    isProcessing,
+    startRecording,
+    stopRecording,
+    transcribeAudio,
+    synthesizeSpeech
+  } = useVoiceInterface();
 
-  // Start a new call
   const handleStartCall = async () => {
     try {
       const newCallId = crypto.randomUUID();
       const result = await startCall({
         callId: newCallId,
-        officeId,
-        fromNumber: '+1234567890',
-        toNumber: '+1987654321'
+        officeId
       });
       
       setCallId(newCallId);
       setConversationHistory([{
-        role: 'assistant',
-        text: result.initialResponse || "Hello! Thank you for calling. How can I help you today?",
+        speaker: 'ai',
+        message: result.initialResponse || "Hello! Thank you for calling. How can I help you today?",
         timestamp: new Date().toISOString()
       }]);
-      setCallContext({ conversationState: 'greeting' });
+      setCallContext(result.context);
+
+      // If voice mode is enabled, speak the initial greeting
+      if (useVoice) {
+        await synthesizeSpeech(result.initialResponse || "Hello! Thank you for calling. How can I help you today?");
+      }
     } catch (error) {
       console.error('Error starting call:', error);
-      // Still set callId for testing even if start call fails
-      const newCallId = crypto.randomUUID();
-      setCallId(newCallId);
-      setConversationHistory([{
-        role: 'assistant',
-        text: "Hello! Thank you for calling. How can I help you today?",
-        timestamp: new Date().toISOString()
-      }]);
-      setCallContext({ conversationState: 'greeting' });
+      toast({
+        title: "Error",
+        description: "Failed to start call. Please try again.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -74,19 +86,24 @@ export function CallSimulator({ officeId }: CallSimulatorProps) {
       
       setCallId(null);
       setConversationHistory([]);
-      setCallContext({});
+      setCallContext(null);
     } catch (error) {
       console.error('Error ending call:', error);
+      toast({
+        title: "Error",
+        description: "Failed to end call properly.",
+        variant: "destructive",
+      });
     }
   };
 
-  // Send message to AI
-  const handleSendMessage = async () => {
-    if (!currentMessage.trim() || !callId) return;
+  const handleSendMessage = async (messageText?: string) => {
+    const message = messageText || currentMessage.trim();
+    if (!message || !callId) return;
 
     const userMessage = {
-      role: 'user',
-      text: currentMessage,
+      speaker: 'user' as const,
+      message: message,
       timestamp: new Date().toISOString()
     };
 
@@ -94,48 +111,54 @@ export function CallSimulator({ officeId }: CallSimulatorProps) {
     setCurrentMessage('');
 
     try {
-      const result = await processMessage({
+      const response = await processMessage({
         callId,
         officeId,
-        userMessage: currentMessage,
-        conversationHistory: conversationHistory,
-        context: callContext
+        userMessage: message
       });
 
-      const aiMessage = {
-        role: 'assistant',
-        text: result.response,
-        timestamp: new Date().toISOString(),
-        intent: result.intent,
-        actions: result.actions
-      };
+      if (response.ai_response) {
+        const aiMessage = {
+          speaker: 'ai' as const,
+          message: response.ai_response,
+          timestamp: new Date().toISOString()
+        };
+        setConversationHistory(prev => [...prev, aiMessage]);
 
-      setConversationHistory(prev => [...prev, aiMessage]);
-      setCallContext(result.context || callContext);
-      
-      // Show warning if fallback was used
-      if (result.warning) {
-        console.warn('AI processing warning:', result.warning);
+        // If voice mode is enabled, synthesize the AI response
+        if (useVoice) {
+          await synthesizeSpeech(response.ai_response);
+        }
       }
     } catch (error) {
       console.error('Error processing message:', error);
-      const errorMessage = {
-        role: 'assistant',
-        text: 'I apologize, but I encountered an error. Let me transfer you to a human representative.',
-        timestamp: new Date().toISOString(),
-        intent: 'transfer_request',
-        actions: ['transfer']
-      };
-      setConversationHistory(prev => [...prev, errorMessage]);
-      
-      // Update call outcome to failed
+      toast({
+        title: "Error",
+        description: "Failed to process message. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleVoiceRecord = async () => {
+    if (isRecording) {
       try {
-        await endCall({ callId, outcome: 'failed' });
-        setCallId(null);
-        setCallContext({});
-      } catch (endError) {
-        console.error('Error ending failed call:', endError);
+        const audioBase64 = await stopRecording();
+        const transcription = await transcribeAudio(audioBase64);
+        
+        if (transcription) {
+          await handleSendMessage(transcription);
+        }
+      } catch (error) {
+        console.error('Voice recording error:', error);
+        toast({
+          title: "Voice Error",
+          description: "Failed to process voice input. Please try again.",
+          variant: "destructive",
+        });
       }
+    } else {
+      await startRecording();
     }
   };
 
@@ -156,11 +179,21 @@ export function CallSimulator({ officeId }: CallSimulatorProps) {
             AI Call Simulator
           </CardTitle>
           <div className="flex items-center gap-2">
-            {callContext.conversationState && (
+            <Button 
+              onClick={() => setUseVoice(!useVoice)}
+              variant={useVoice ? "default" : "outline"}
+              size="sm"
+            >
+              <Volume2 className="w-4 h-4 mr-2" />
+              {useVoice ? 'Voice On' : 'Voice Off'}
+            </Button>
+            
+            {callContext?.conversationState && (
               <Badge variant="outline">
                 {callContext.conversationState.replace('_', ' ').toUpperCase()}
               </Badge>
             )}
+            
             {!callId ? (
               <Button 
                 onClick={handleStartCall} 
@@ -168,7 +201,7 @@ export function CallSimulator({ officeId }: CallSimulatorProps) {
                 className="gap-2"
               >
                 <Phone className="h-4 w-4" />
-                Start Call
+                {isStartingCall ? 'Starting...' : 'Start Call'}
               </Button>
             ) : (
               <Button 
@@ -178,7 +211,7 @@ export function CallSimulator({ officeId }: CallSimulatorProps) {
                 className="gap-2"
               >
                 <PhoneOff className="h-4 w-4" />
-                End Call
+                {isEndingCall ? 'Ending...' : 'End Call'}
               </Button>
             )}
           </div>
@@ -193,41 +226,29 @@ export function CallSimulator({ officeId }: CallSimulatorProps) {
               <div 
                 key={index}
                 className={`flex gap-3 ${
-                  message.role === 'user' ? 'justify-end' : 'justify-start'
+                  message.speaker === 'user' ? 'justify-end' : 'justify-start'
                 }`}
               >
                 <div className={`flex gap-2 max-w-[80%] ${
-                  message.role === 'user' ? 'flex-row-reverse' : 'flex-row'
+                  message.speaker === 'user' ? 'flex-row-reverse' : 'flex-row'
                 }`}>
                   <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
-                    message.role === 'user' 
+                    message.speaker === 'user' 
                       ? 'bg-primary text-primary-foreground' 
                       : 'bg-muted text-muted-foreground'
                   }`}>
-                    {message.role === 'user' ? (
+                    {message.speaker === 'user' ? (
                       <User className="h-4 w-4" />
                     ) : (
                       <Bot className="h-4 w-4" />
                     )}
                   </div>
                   <div className={`rounded-lg p-3 ${
-                    message.role === 'user'
+                    message.speaker === 'user'
                       ? 'bg-primary text-primary-foreground'
                       : 'bg-muted'
                   }`}>
-                    <p className="text-sm">{message.text}</p>
-                    {message.intent && (
-                      <div className="mt-2 flex gap-1 flex-wrap">
-                        <Badge variant="secondary" className="text-xs">
-                          Intent: {message.intent}
-                        </Badge>
-                        {message.actions?.length > 0 && (
-                          <Badge variant="outline" className="text-xs">
-                            Actions: {message.actions.join(', ')}
-                          </Badge>
-                        )}
-                      </div>
-                    )}
+                    <p className="text-sm">{message.message}</p>
                     <p className="text-xs opacity-70 mt-1">
                       {new Date(message.timestamp).toLocaleTimeString()}
                     </p>
@@ -257,18 +278,29 @@ export function CallSimulator({ officeId }: CallSimulatorProps) {
         {/* Input Area */}
         {callId && (
           <div className="p-4 border-t">
-            <div className="flex gap-2">
+            <div className="flex space-x-2">
               <Input
                 value={currentMessage}
                 onChange={(e) => setCurrentMessage(e.target.value)}
+                placeholder={useVoice ? "Use voice or type your message..." : "Type your message..."}
                 onKeyPress={handleKeyPress}
-                placeholder="Type your message..."
-                disabled={isProcessingMessage}
+                disabled={!callId || isProcessingMessage}
                 className="flex-1"
               />
+              
+              {useVoice && (
+                <Button 
+                  onClick={handleVoiceRecord}
+                  disabled={!callId || isProcessingMessage || isProcessing}
+                  variant={isRecording ? "destructive" : "outline"}
+                >
+                  {isRecording ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+                </Button>
+              )}
+              
               <Button 
-                onClick={handleSendMessage}
-                disabled={!currentMessage.trim() || isProcessingMessage}
+                onClick={() => handleSendMessage()}
+                disabled={!callId || !currentMessage.trim() || isProcessingMessage}
                 size="icon"
               >
                 <Send className="h-4 w-4" />
