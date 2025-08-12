@@ -12,6 +12,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Calendar, Clock, User, MapPin, Stethoscope, Plus, ExternalLink } from 'lucide-react';
 import { format, addDays } from 'date-fns';
 import { PatientSelector } from '@/components/ui/patient-selector';
+import { dayUtcRange } from '@/utils/dateUtils';
 
 interface Patient {
   id: string;
@@ -106,8 +107,11 @@ export function BookingInterface({ onAppointmentBooked }: BookingInterfaceProps)
     queryFn: async () => {
       if (!profile?.clinic_id || !selectedProvider) return [];
       
-      const tomorrow = addDays(new Date(), 1);
-      const weekLater = addDays(new Date(), 8);
+      console.log('Fetching slots for provider:', selectedProvider, 'location:', selectedLocation);
+      
+      // Include slots from today onwards (not just tomorrow)
+      const now = new Date();
+      const twoWeeksLater = addDays(now, 14);
       
       let query = supabase
         .from('slots')
@@ -115,15 +119,20 @@ export function BookingInterface({ onAppointmentBooked }: BookingInterfaceProps)
         .eq('clinic_id', profile.clinic_id)
         .eq('provider_id', selectedProvider)
         .eq('status', 'open')
-        .gte('starts_at', tomorrow.toISOString())
-        .lte('starts_at', weekLater.toISOString());
+        .gte('starts_at', now.toISOString())
+        .lte('starts_at', twoWeeksLater.toISOString());
 
       if (selectedLocation) {
         query = query.eq('location_id', selectedLocation);
       }
         
       const { data, error } = await query.order('starts_at');
-      if (error) throw error;
+      if (error) {
+        console.error('Slot fetch error:', error);
+        throw error;
+      }
+      
+      console.log('Found slots:', data?.length || 0);
       return data;
     },
     enabled: !!profile?.clinic_id && !!selectedProvider,
@@ -250,10 +259,12 @@ export function BookingInterface({ onAppointmentBooked }: BookingInterfaceProps)
       setSelectedSlot('');
       setSelectedPatient(null);
       
-      // Refresh data
+      // Refresh data - be more specific with cache invalidation
       queryClient.invalidateQueries({ queryKey: ['slots'] });
       queryClient.invalidateQueries({ queryKey: ['available-slots'] });
       queryClient.invalidateQueries({ queryKey: ['appointments'] });
+      queryClient.invalidateQueries({ queryKey: ['recent-appointments'] });
+      queryClient.invalidateQueries({ queryKey: ['appointment-stats'] });
       queryClient.invalidateQueries({ queryKey: ['schedule'] });
       
       // Notify parent component

@@ -1,5 +1,4 @@
 import React from 'react';
-import { Layout } from '@/components/Layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { SecurityDashboard } from '@/components/security/SecurityDashboard';
@@ -15,7 +14,7 @@ const Settings = () => {
   const { hasPermission } = useSecurity();
 
   return (
-    <Layout>
+    <div className="p-6" data-testid="page-settings">
       <div className="container mx-auto px-4 py-8">
         <div className="flex items-center gap-3 mb-6">
           <SettingsIcon className="h-8 w-8" />
@@ -154,7 +153,7 @@ const Settings = () => {
           </TabsContent>
         </Tabs>
       </div>
-    </Layout>
+    </div>
   );
 };
 

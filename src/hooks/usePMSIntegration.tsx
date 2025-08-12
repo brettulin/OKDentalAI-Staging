@@ -183,7 +183,16 @@ export function usePMSIntegration() {
         },
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error(`PMS ${action} error:`, error);
+        throw error;
+      }
+      
+      if (!data?.success) {
+        console.error(`PMS ${action} failed:`, data);
+        throw new Error(data?.error || `${action} operation failed`);
+      }
+      
       return data;
     },
   });

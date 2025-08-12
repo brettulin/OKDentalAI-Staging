@@ -11,7 +11,19 @@ export class DummyAdapter implements PMSInterface {
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     )
-    this.clinicId = credentials?.clinicId || crypto.randomUUID()
+    
+    // Extract clinic ID from credentials or use a default valid UUID format
+    if (credentials?.clinicId && this.isValidUUID(credentials.clinicId)) {
+      this.clinicId = credentials.clinicId;
+    } else {
+      // Use the demo clinic ID that exists in the database
+      this.clinicId = 'd6e5800e-95d8-4cf0-aa4f-2905926e578e';
+    }
+  }
+
+  private isValidUUID(str: string): boolean {
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    return uuidRegex.test(str);
   }
 
   async searchPatientByPhone(phoneNumber: string): Promise<Patient[]> {
