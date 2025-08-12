@@ -24,14 +24,16 @@ const Settings = () => {
         <SecurityBanner />
 
         <Tabs defaultValue="general" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="general">General</TabsTrigger>
-            <TabsTrigger value="security">Security</TabsTrigger>
-            {hasPermission('manage_users') && (
-              <TabsTrigger value="users">Users</TabsTrigger>
-            )}
-            <TabsTrigger value="data">Data</TabsTrigger>
-          </TabsList>
+        <TabsList className="grid w-full grid-cols-6">
+          <TabsTrigger value="general">General</TabsTrigger>
+          <TabsTrigger value="security">Security</TabsTrigger>
+          <TabsTrigger value="production">Production</TabsTrigger>
+          <TabsTrigger value="monitoring">Monitoring</TabsTrigger>
+          {hasPermission('manage_users') && (
+            <TabsTrigger value="users">Users</TabsTrigger>
+          )}
+          <TabsTrigger value="data">Data</TabsTrigger>
+        </TabsList>
 
           <TabsContent value="general" className="space-y-6">
             <Card>
