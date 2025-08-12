@@ -350,6 +350,7 @@ export type Database = {
         Row: {
           clinic_id: string
           created_at: string
+          encrypted_credentials: string | null
           id: string
           name: string
           pms_credentials: Json | null
@@ -359,6 +360,7 @@ export type Database = {
         Insert: {
           clinic_id: string
           created_at?: string
+          encrypted_credentials?: string | null
           id?: string
           name: string
           pms_credentials?: Json | null
@@ -368,6 +370,7 @@ export type Database = {
         Update: {
           clinic_id?: string
           created_at?: string
+          encrypted_credentials?: string | null
           id?: string
           name?: string
           pms_credentials?: Json | null
@@ -486,6 +489,48 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      security_audit_log: {
+        Row: {
+          action_type: string
+          clinic_id: string
+          created_at: string | null
+          id: string
+          ip_address: unknown | null
+          metadata: Json | null
+          resource_id: string | null
+          resource_type: string
+          risk_level: string | null
+          user_agent: string | null
+          user_id: string | null
+        }
+        Insert: {
+          action_type: string
+          clinic_id: string
+          created_at?: string | null
+          id?: string
+          ip_address?: unknown | null
+          metadata?: Json | null
+          resource_id?: string | null
+          resource_type: string
+          risk_level?: string | null
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          action_type?: string
+          clinic_id?: string
+          created_at?: string | null
+          id?: string
+          ip_address?: unknown | null
+          metadata?: Json | null
+          resource_id?: string | null
+          resource_type?: string
+          risk_level?: string | null
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
       }
       services: {
         Row: {
@@ -630,6 +675,20 @@ export type Database = {
       get_allowed_call_outcomes: {
         Args: Record<PropertyKey, never>
         Returns: string[]
+      }
+      get_current_user_role: {
+        Args: Record<PropertyKey, never>
+        Returns: string
+      }
+      log_sensitive_access: {
+        Args: {
+          p_clinic_id: string
+          p_action_type: string
+          p_resource_type: string
+          p_resource_id?: string
+          p_metadata?: Json
+        }
+        Returns: undefined
       }
     }
     Enums: {
