@@ -1,4 +1,4 @@
-import { PMSInterface } from './pms-interface.ts'
+import { PMSInterface } from '../../_shared/pms-interface.ts'
 import { CareStackAdapter } from '../../_shared/carestack-adapter.ts'
 import { DentrixAdapter } from './dentrix-adapter.ts'
 import { EaglesoftAdapter } from './eaglesoft-adapter.ts'

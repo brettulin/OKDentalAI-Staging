@@ -1,4 +1,4 @@
-import { PMSInterface, Patient, PatientData, Slot, Appointment, AppointmentData, Provider, Location, DateRange } from './pms-interface.ts'
+import { PMSInterface, Patient, PatientData, Slot, Appointment, AppointmentData, Provider, Location, DateRange } from '../../_shared/pms-interface.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 export class DummyAdapter implements PMSInterface {

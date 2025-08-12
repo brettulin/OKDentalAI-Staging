@@ -8,7 +8,7 @@ import {
   Appointment, 
   Provider, 
   Location 
-} from './pms-interface.ts'
+} from '../../_shared/pms-interface.ts'
 
 export class DentrixAdapter implements PMSInterface {
   private credentials: any
