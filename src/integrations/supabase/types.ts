@@ -182,34 +182,84 @@ export type Database = {
           },
         ]
       }
+      call_events: {
+        Row: {
+          call_id: string
+          created_at: string
+          created_by: string | null
+          event_data: Json | null
+          event_type: string
+          id: string
+        }
+        Insert: {
+          call_id: string
+          created_at?: string
+          created_by?: string | null
+          event_data?: Json | null
+          event_type: string
+          id?: string
+        }
+        Update: {
+          call_id?: string
+          created_at?: string
+          created_by?: string | null
+          event_data?: Json | null
+          event_type?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "call_events_call_id_fkey"
+            columns: ["call_id"]
+            isOneToOne: false
+            referencedRelation: "calls"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       calls: {
         Row: {
+          ai_confidence_score: number | null
+          assigned_to: string | null
+          call_duration_seconds: number | null
+          caller_phone: string | null
           clinic_id: string
           ended_at: string | null
           id: string
           office_id: string | null
           outcome: string | null
           started_at: string
+          status: Database["public"]["Enums"]["call_status_type"] | null
           transcript_json: Json | null
           twilio_call_sid: string | null
         }
         Insert: {
+          ai_confidence_score?: number | null
+          assigned_to?: string | null
+          call_duration_seconds?: number | null
+          caller_phone?: string | null
           clinic_id: string
           ended_at?: string | null
           id?: string
           office_id?: string | null
           outcome?: string | null
           started_at?: string
+          status?: Database["public"]["Enums"]["call_status_type"] | null
           transcript_json?: Json | null
           twilio_call_sid?: string | null
         }
         Update: {
+          ai_confidence_score?: number | null
+          assigned_to?: string | null
+          call_duration_seconds?: number | null
+          caller_phone?: string | null
           clinic_id?: string
           ended_at?: string | null
           id?: string
           office_id?: string | null
           outcome?: string | null
           started_at?: string
+          status?: Database["public"]["Enums"]["call_status_type"] | null
           transcript_json?: Json | null
           twilio_call_sid?: string | null
         }
@@ -837,6 +887,13 @@ export type Database = {
     }
     Enums: {
       admin_role_type: "technical_admin" | "medical_admin" | "clinic_admin"
+      call_status_type:
+        | "incoming"
+        | "in_progress"
+        | "on_hold"
+        | "completed"
+        | "failed"
+        | "transferred"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -965,6 +1022,14 @@ export const Constants = {
   public: {
     Enums: {
       admin_role_type: ["technical_admin", "medical_admin", "clinic_admin"],
+      call_status_type: [
+        "incoming",
+        "in_progress",
+        "on_hold",
+        "completed",
+        "failed",
+        "transferred",
+      ],
     },
   },
 } as const
