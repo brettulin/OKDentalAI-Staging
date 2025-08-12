@@ -14,16 +14,26 @@ const HIGH_RISK_ACTIONS = [
   'delete_patient',
   'export_data',
   'view_all_calls',
-  'modify_user_roles'
+  'modify_user_roles',
+  'admin_role_change',
+  'pms_credential_access'
 ];
 
+// Enhanced role permissions with admin role support
 const ROLE_PERMISSIONS = {
   owner: ['all'],
-  admin: ['view_patients', 'create_patients', 'update_patients', 'view_calls', 'view_appointments'],
+  admin: ['view_patients', 'create_patients', 'update_patients', 'view_calls', 'view_appointments', 'manage_clinic_settings'],
   doctor: ['view_patients', 'create_patients', 'update_patients', 'view_calls', 'create_calls', 'view_appointments'],
   nurse: ['view_patients', 'create_patients', 'update_patients', 'view_calls', 'view_appointments'],
   medical_assistant: ['view_patients', 'create_patients', 'update_patients', 'view_appointments'],
   staff: ['view_appointments']
+};
+
+// Admin role specific permissions
+const ADMIN_PERMISSIONS = {
+  technical_admin: ['manage_users', 'manage_pms_integration', 'view_audit_logs'],
+  medical_admin: ['manage_medical_data', 'view_audit_logs'],
+  clinic_admin: ['manage_clinic_settings', 'view_audit_logs']
 };
 
 export const SecurityProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -74,8 +84,16 @@ export const SecurityProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     // Owner has all permissions
     if (permissions.includes('all')) return true;
     
-    // Check specific permission
-    return permissions.includes(action);
+    // Check base role permissions
+    if (permissions.includes(action)) return true;
+    
+    // Check admin role permissions
+    if (profile.admin_role) {
+      const adminPermissions = ADMIN_PERMISSIONS[profile.admin_role as keyof typeof ADMIN_PERMISSIONS] || [];
+      return adminPermissions.includes(action);
+    }
+    
+    return false;
   };
 
   const logSecurityEvent = async (action: string, resource: string, resourceId?: string) => {

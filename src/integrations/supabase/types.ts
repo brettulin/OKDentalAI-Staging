@@ -422,6 +422,7 @@ export type Database = {
       }
       profiles: {
         Row: {
+          admin_role: Database["public"]["Enums"]["admin_role_type"] | null
           clinic_id: string | null
           created_at: string
           display_name: string | null
@@ -431,6 +432,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          admin_role?: Database["public"]["Enums"]["admin_role_type"] | null
           clinic_id?: string | null
           created_at?: string
           display_name?: string | null
@@ -440,6 +442,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          admin_role?: Database["public"]["Enums"]["admin_role_type"] | null
           clinic_id?: string | null
           created_at?: string
           display_name?: string | null
@@ -680,6 +683,19 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: string
       }
+      has_admin_permission: {
+        Args: { permission_type: string }
+        Returns: boolean
+      }
+      log_admin_action: {
+        Args: {
+          p_action_type: string
+          p_resource_type: string
+          p_resource_id?: string
+          p_metadata?: Json
+        }
+        Returns: undefined
+      }
       log_sensitive_access: {
         Args: {
           p_clinic_id: string
@@ -690,13 +706,20 @@ export type Database = {
         }
         Returns: undefined
       }
+      update_admin_role: {
+        Args: {
+          target_user_id: string
+          new_admin_role: Database["public"]["Enums"]["admin_role_type"]
+        }
+        Returns: undefined
+      }
       update_user_role: {
         Args: { target_user_id: string; new_role: string }
         Returns: undefined
       }
     }
     Enums: {
-      [_ in never]: never
+      admin_role_type: "technical_admin" | "medical_admin" | "clinic_admin"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -823,6 +846,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      admin_role_type: ["technical_admin", "medical_admin", "clinic_admin"],
+    },
   },
 } as const
