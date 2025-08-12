@@ -12,6 +12,7 @@ import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
 import { Settings, Save, Loader2, Play, Volume2 } from 'lucide-react';
 import { PageSkeleton } from '@/components/PageSkeleton';
+import { VoiceLatencyTest } from '@/components/ai/VoiceLatencyTest';
 
 const AISettingsPage = () => {
   const { profile } = useAuth();
@@ -90,11 +91,11 @@ const AISettingsPage = () => {
   // Test voice synthesis
   const testVoiceMutation = useMutation({
     mutationFn: async (text: string) => {
-      const { data, error } = await supabase.functions.invoke('test-voice', {
+      const { data, error } = await supabase.functions.invoke('voice-synthesize', {
         body: { 
           text,
-          voice_id: formData.voice_id,
-          language: formData.language 
+          voiceId: formData.voice_id,
+          model: formData.voice_model 
         },
       });
 
@@ -102,13 +103,19 @@ const AISettingsPage = () => {
       return data;
     },
     onSuccess: (data) => {
-      if (data.audioUrl) {
-        // Play the audio
-        const audio = new Audio(data.audioUrl);
+      if (data.audioBase64) {
+        // Convert base64 to audio and play
+        const audioBlob = new Blob([
+          Uint8Array.from(atob(data.audioBase64), c => c.charCodeAt(0))
+        ], { type: data.mime || 'audio/mpeg' });
+        
+        const audio = new Audio(URL.createObjectURL(audioBlob));
+        audio.onended = () => URL.revokeObjectURL(audio.src);
         audio.play().catch(console.error);
+        
         toast({
           title: 'Voice test successful',
-          description: 'Playing synthesized audio.',
+          description: `Playing synthesized audio using ${data.voiceId} voice.`,
         });
       } else {
         toast({
@@ -138,6 +145,7 @@ const AISettingsPage = () => {
     auto_booking_enabled: (settings?.booking_policy as any)?.auto_booking_enabled || false,
     require_insurance: (settings?.booking_policy as any)?.require_insurance || false,
     max_advance_days: (settings?.booking_policy as any)?.max_advance_days || 30,
+    voice_enabled: (settings?.booking_policy as any)?.voice_enabled !== false, // Default to enabled
   });
 
   const [testGreeting, setTestGreeting] = useState('');
@@ -156,6 +164,7 @@ const AISettingsPage = () => {
         auto_booking_enabled: bookingPolicy.auto_booking_enabled || false,
         require_insurance: bookingPolicy.require_insurance || false,
         max_advance_days: bookingPolicy.max_advance_days || 30,
+        voice_enabled: bookingPolicy.voice_enabled !== false, // Default to enabled
       });
     }
   }, [settings]);
@@ -174,6 +183,7 @@ const AISettingsPage = () => {
         require_insurance: formData.require_insurance,
         max_advance_days: formData.max_advance_days,
         greeting: formData.greeting,
+        voice_enabled: formData.voice_enabled,
       }
     };
 
@@ -398,6 +408,20 @@ const AISettingsPage = () => {
               />
             </div>
 
+            <div className="flex items-center justify-between">
+              <div>
+                <Label htmlFor="voice_enabled">Enable Voice Interface</Label>
+                <p className="text-sm text-muted-foreground">
+                  Allow AI to use voice synthesis and recognition for phone calls
+                </p>
+              </div>
+              <Switch
+                id="voice_enabled"
+                checked={formData.voice_enabled}
+                onCheckedChange={(checked) => setFormData(prev => ({ ...prev, voice_enabled: checked }))}
+              />
+            </div>
+
             <div>
               <Label htmlFor="max_advance_days">Maximum Advance Booking (Days)</Label>
               <Input
@@ -414,6 +438,11 @@ const AISettingsPage = () => {
             </div>
           </CardContent>
         </Card>
+
+        {/* Voice Testing */}
+        {formData.voice_enabled && (
+          <VoiceLatencyTest />
+        )}
 
         <div className="flex justify-end">
           <Button 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,6 +8,9 @@ import { useAICallHandler } from '@/hooks/useAICallHandler';
 import { useVoiceInterface } from '@/hooks/useVoiceInterface';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/components/ui/use-toast';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
+import { useQuery } from '@tanstack/react-query';
 
 interface CallSimulatorProps {
   officeId: string;
@@ -15,6 +18,7 @@ interface CallSimulatorProps {
 
 export function CallSimulator({ officeId }: CallSimulatorProps) {
   const { toast } = useToast();
+  const { profile } = useAuth();
   const [callId, setCallId] = useState<string | null>(null);
   const [currentMessage, setCurrentMessage] = useState('');
   const [useVoice, setUseVoice] = useState(false);
@@ -24,6 +28,24 @@ export function CallSimulator({ officeId }: CallSimulatorProps) {
     timestamp: string;
   }>>([]);
   const [callContext, setCallContext] = useState<any>(null);
+
+  // Fetch AI settings for voice configuration
+  const { data: aiSettings } = useQuery({
+    queryKey: ['ai-settings', profile?.clinic_id],
+    queryFn: async () => {
+      if (!profile?.clinic_id) return null;
+      
+      const { data, error } = await supabase
+        .from('ai_settings')
+        .select('*')
+        .eq('clinic_id', profile.clinic_id)
+        .maybeSingle();
+      
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!profile?.clinic_id,
+  });
 
   const {
     startCall,
@@ -60,9 +82,14 @@ export function CallSimulator({ officeId }: CallSimulatorProps) {
       }]);
       setCallContext(result.context);
 
-      // If voice mode is enabled, speak the initial greeting
+      // If voice mode is enabled, speak the initial greeting using clinic settings
       if (useVoice) {
-        await synthesizeSpeech(result.initialResponse || "Hello! Thank you for calling. How can I help you today?");
+        const greeting = result.initialResponse || "Hello! Thank you for calling. How can I help you today?";
+        await synthesizeSpeech(
+          greeting,
+          (aiSettings as any)?.voice_id,
+          aiSettings?.voice_model
+        );
       }
     } catch (error) {
       console.error('Error starting call:', error);
@@ -125,9 +152,13 @@ export function CallSimulator({ officeId }: CallSimulatorProps) {
         };
         setConversationHistory(prev => [...prev, aiMessage]);
 
-        // If voice mode is enabled, synthesize the AI response
+        // If voice mode is enabled, synthesize the AI response using clinic settings
         if (useVoice) {
-          await synthesizeSpeech(response.ai_response);
+          await synthesizeSpeech(
+            response.ai_response,
+            (aiSettings as any)?.voice_id,
+            aiSettings?.voice_model
+          );
         }
       }
     } catch (error) {
@@ -144,9 +175,13 @@ export function CallSimulator({ officeId }: CallSimulatorProps) {
     if (isRecording) {
       try {
         const audioBase64 = await stopRecording();
-        const transcription = await transcribeAudio(audioBase64);
+        const transcription = await transcribeAudio(audioBase64, 'audio/webm');
         
         if (transcription) {
+          // Store audio artifact in call turn metadata
+          if (callId) {
+            console.log('Voice input transcribed:', { transcription, audioLength: audioBase64.length });
+          }
           await handleSendMessage(transcription);
         }
       } catch (error) {
@@ -183,10 +218,16 @@ export function CallSimulator({ officeId }: CallSimulatorProps) {
               onClick={() => setUseVoice(!useVoice)}
               variant={useVoice ? "default" : "outline"}
               size="sm"
+              disabled={!aiSettings || !(aiSettings?.booking_policy as any)?.voice_enabled}
             >
               <Volume2 className="w-4 h-4 mr-2" />
               {useVoice ? 'Voice On' : 'Voice Off'}
             </Button>
+            {(!aiSettings || !(aiSettings?.booking_policy as any)?.voice_enabled) && (
+              <span className="text-xs text-muted-foreground">
+                Voice disabled in settings
+              </span>
+            )}
             
             {callContext?.conversationState && (
               <Badge variant="outline">

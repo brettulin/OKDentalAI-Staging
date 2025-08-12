@@ -86,11 +86,11 @@ export const useVoiceInterface = () => {
     });
   }, [isRecording]);
 
-  const transcribeAudio = useCallback(async (audioBase64: string, language = 'en'): Promise<string> => {
+  const transcribeAudio = useCallback(async (audioBase64: string, mime = 'audio/webm'): Promise<string> => {
     setIsProcessing(true);
     try {
-      const { data, error } = await supabase.functions.invoke('speech-to-text', {
-        body: { audio: audioBase64, language }
+      const { data, error } = await supabase.functions.invoke('voice-transcribe', {
+        body: { audioBase64, mime }
       });
 
       if (error) throw error;
@@ -109,20 +109,20 @@ export const useVoiceInterface = () => {
     }
   }, [toast]);
 
-  const synthesizeSpeech = useCallback(async (text: string, voice = 'alloy'): Promise<void> => {
+  const synthesizeSpeech = useCallback(async (text: string, voiceId?: string, model?: string): Promise<void> => {
     setIsPlaying(true);
     try {
-      const { data, error } = await supabase.functions.invoke('text-to-speech', {
-        body: { text, voice }
+      const { data, error } = await supabase.functions.invoke('voice-synthesize', {
+        body: { text, voiceId, model }
       });
 
       if (error) throw error;
 
       // Convert base64 to audio and play
-      const audioData = data.audioContent;
+      const audioData = data.audioBase64;
       const audioBlob = new Blob([
         Uint8Array.from(atob(audioData), c => c.charCodeAt(0))
-      ], { type: 'audio/mpeg' });
+      ], { type: data.mime || 'audio/mpeg' });
       
       const audio = new Audio(URL.createObjectURL(audioBlob));
       
