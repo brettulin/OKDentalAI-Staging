@@ -8,7 +8,7 @@ import {
   Appointment,
   Provider,
   Location
-} from './pms/pms-interface.ts'
+} from '../pms-integrations/pms/pms-interface.ts'
 
 import {
   CareStackPatient,
