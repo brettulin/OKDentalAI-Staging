@@ -2,12 +2,13 @@ import React from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ClinicSetup } from './ClinicSetup';
 import { PMSSetup } from './PMSSetup';
+import { CareStackSetup } from './CareStackSetup';
 import { ProvidersSetup } from './ProvidersSetup';
 import { LocationsSetup } from './LocationsSetup';
 import { AIReceptionistDashboard } from './AIReceptionistDashboard';
 import { TestDataManager } from './TestDataManager';
 import { QAChecklist } from './QAChecklist';
-import { Building, Settings, Users, MapPin, Bot, Database, CheckSquare } from 'lucide-react';
+import { Building, Settings, Users, MapPin, Bot, Database, CheckSquare, Activity } from 'lucide-react';
 
 export const SetupTabs = () => {
   return (
@@ -20,7 +21,7 @@ export const SetupTabs = () => {
       </div>
 
       <Tabs defaultValue="clinic" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-7">
+        <TabsList className="grid w-full grid-cols-8">
           <TabsTrigger value="clinic" className="flex items-center gap-2">
             <Building className="h-4 w-4" />
             Clinic
@@ -28,6 +29,10 @@ export const SetupTabs = () => {
           <TabsTrigger value="pms" className="flex items-center gap-2">
             <Settings className="h-4 w-4" />
             PMS
+          </TabsTrigger>
+          <TabsTrigger value="carestack" className="flex items-center gap-2">
+            <Activity className="h-4 w-4" />
+            CareStack
           </TabsTrigger>
           <TabsTrigger value="providers" className="flex items-center gap-2">
             <Users className="h-4 w-4" />
@@ -57,6 +62,10 @@ export const SetupTabs = () => {
 
         <TabsContent value="pms">
           <PMSSetup />
+        </TabsContent>
+
+        <TabsContent value="carestack">
+          <CareStackSetup />
         </TabsContent>
 
         <TabsContent value="providers">
