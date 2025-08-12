@@ -1,1 +1,16 @@
 project_id = "zvpezltqpphvolzgfhme"
+
+[functions.pms-carestack-list-locations]
+verify_jwt = true
+
+[functions.pms-carestack-list-operatories]
+verify_jwt = true
+
+[functions.pms-carestack-search-patients]
+verify_jwt = true
+
+[functions.pms-carestack-create-patient]
+verify_jwt = true
+
+[functions.pms-carestack-create-appointment]
+verify_jwt = true

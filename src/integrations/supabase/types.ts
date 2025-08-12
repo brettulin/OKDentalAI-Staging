@@ -58,8 +58,10 @@ export type Database = {
           clinic_id: string
           created_at: string
           ends_at: string
+          external_id: string | null
           id: string
           location_id: string | null
+          office_id: string | null
           patient_id: string
           provider_id: string | null
           service_id: string
@@ -70,8 +72,10 @@ export type Database = {
           clinic_id: string
           created_at?: string
           ends_at: string
+          external_id?: string | null
           id?: string
           location_id?: string | null
+          office_id?: string | null
           patient_id: string
           provider_id?: string | null
           service_id: string
@@ -82,8 +86,10 @@ export type Database = {
           clinic_id?: string
           created_at?: string
           ends_at?: string
+          external_id?: string | null
           id?: string
           location_id?: string | null
+          office_id?: string | null
           patient_id?: string
           provider_id?: string | null
           service_id?: string
@@ -103,6 +109,13 @@ export type Database = {
             columns: ["location_id"]
             isOneToOne: false
             referencedRelation: "locations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "appointments_office_id_fkey"
+            columns: ["office_id"]
+            isOneToOne: false
+            referencedRelation: "offices"
             referencedColumns: ["id"]
           },
           {
@@ -385,30 +398,39 @@ export type Database = {
           created_at: string
           dob: string | null
           email: string | null
+          external_id: string | null
           full_name: string
           id: string
           notes: string | null
+          office_id: string | null
           phone: string | null
+          source: string | null
         }
         Insert: {
           clinic_id: string
           created_at?: string
           dob?: string | null
           email?: string | null
+          external_id?: string | null
           full_name: string
           id?: string
           notes?: string | null
+          office_id?: string | null
           phone?: string | null
+          source?: string | null
         }
         Update: {
           clinic_id?: string
           created_at?: string
           dob?: string | null
           email?: string | null
+          external_id?: string | null
           full_name?: string
           id?: string
           notes?: string | null
+          office_id?: string | null
           phone?: string | null
+          source?: string | null
         }
         Relationships: [
           {
@@ -416,6 +438,13 @@ export type Database = {
             columns: ["clinic_id"]
             isOneToOne: false
             referencedRelation: "clinics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "patients_office_id_fkey"
+            columns: ["office_id"]
+            isOneToOne: false
+            referencedRelation: "offices"
             referencedColumns: ["id"]
           },
         ]
