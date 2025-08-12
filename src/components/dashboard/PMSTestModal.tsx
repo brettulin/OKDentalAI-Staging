@@ -9,9 +9,10 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { CheckCircle, XCircle, Clock, TestTube } from 'lucide-react';
+import { CheckCircle, XCircle, Clock, TestTube, AlertTriangle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { CareStackDebugPanel } from './CareStackDebugPanel';
 
 interface PMSTestModalProps {
   open: boolean;
@@ -22,19 +23,29 @@ interface PMSTestModalProps {
 
 interface TestResult {
   test: string;
-  status: 'pending' | 'success' | 'error';
+  status: 'pending' | 'success' | 'error' | 'warning';
   duration?: number;
   data?: any;
   error?: string;
 }
 
+interface DebugInfo {
+  mode?: string;
+  baseUrl?: string;
+  useMock?: boolean;
+  circuitBreakers?: Record<string, any>;
+}
+
 export function PMSTestModal({ open, onClose, officeId, officeName }: PMSTestModalProps) {
   const [testResults, setTestResults] = useState<TestResult[]>([]);
   const [isRunning, setIsRunning] = useState(false);
+  const [debugInfo, setDebugInfo] = useState<DebugInfo>({});
+  const [recentRequests, setRecentRequests] = useState<any[]>([]);
   const { toast } = useToast();
 
   const tests = [
-    { name: 'Connection Test', key: 'ping' },
+    { name: 'Connection Test', key: 'connectionTest' },
+    { name: 'Credentials Check', key: 'ping' },
     { name: 'List Providers', key: 'providers' },
     { name: 'List Locations', key: 'locations' },
     { name: 'Search Patient', key: 'search_patient' },
@@ -51,6 +62,12 @@ export function PMSTestModal({ open, onClose, officeId, officeName }: PMSTestMod
 
     if (error) {
       throw new Error(`Edge Function Error: ${error.message || 'Unknown error'}`);
+    }
+
+    // Handle comprehensive CareStack test results
+    if (data.ok !== undefined) {
+      // This is a comprehensive connection test result
+      return data;
     }
 
     if (!data.success) {
@@ -79,14 +96,36 @@ export function PMSTestModal({ open, onClose, officeId, officeName }: PMSTestMod
         const response = await runSingleTest(test.key);
         
         const duration = Date.now() - startTime;
-        results[i] = {
-          ...results[i],
-          status: 'success',
-          duration,
-          data: response.data || response,
-        };
         
-        console.log(`Test ${test.name} passed in ${duration}ms`)
+        // Handle comprehensive connection test results
+        if (test.key === 'connectionTest' && response.steps) {
+          setDebugInfo({
+            mode: response.mode,
+            baseUrl: response.debug?.baseUrl,
+            useMock: response.debug?.useMock,
+            circuitBreakers: response.debug?.circuitBreakers
+          });
+          
+          // Check if all steps passed
+          const allPassed = response.steps.every((step: any) => step.ok);
+          const hasWarnings = response.steps.some((step: any) => !step.ok);
+          
+          results[i] = {
+            ...results[i],
+            status: allPassed ? 'success' : hasWarnings ? 'warning' : 'error',
+            duration,
+            data: response,
+          };
+        } else {
+          results[i] = {
+            ...results[i],
+            status: 'success',
+            duration,
+            data: response.data || response,
+          };
+        }
+        
+        console.log(`Test ${test.name} completed in ${duration}ms`)
       } catch (error) {
         const duration = Date.now() - startTime;
         console.error(`Test ${test.name} failed:`, error)
@@ -133,6 +172,8 @@ export function PMSTestModal({ open, onClose, officeId, officeName }: PMSTestMod
         return <Clock className="h-4 w-4 text-muted-foreground animate-spin" />;
       case 'success':
         return <CheckCircle className="h-4 w-4 text-green-500" />;
+      case 'warning':
+        return <AlertTriangle className="h-4 w-4 text-yellow-500" />;
       case 'error':
         return <XCircle className="h-4 w-4 text-red-500" />;
     }
@@ -144,6 +185,8 @@ export function PMSTestModal({ open, onClose, officeId, officeName }: PMSTestMod
         return <Badge variant="secondary">Running...</Badge>;
       case 'success':
         return <Badge variant="default" className="bg-green-500">Passed</Badge>;
+      case 'warning':
+        return <Badge variant="secondary" className="bg-yellow-500">Warning</Badge>;
       case 'error':
         return <Badge variant="destructive">Failed</Badge>;
     }
@@ -197,7 +240,26 @@ export function PMSTestModal({ open, onClose, officeId, officeName }: PMSTestMod
                       </div>
                     </div>
 
-                    {result.data && (
+                    {result.data?.steps && (
+                      <div className="mt-2 space-y-1">
+                        {result.data.steps.map((step: any, stepIndex: number) => (
+                          <div key={stepIndex} className="flex items-center justify-between text-xs p-2 bg-muted/50 rounded">
+                            <span>{step.name}</span>
+                            <div className="flex items-center gap-2">
+                              {step.ok ? (
+                                <CheckCircle className="h-3 w-3 text-green-500" />
+                              ) : (
+                                <XCircle className="h-3 w-3 text-red-500" />
+                              )}
+                              {step.count !== undefined && <span className="text-muted-foreground">({step.count})</span>}
+                              {step.slots !== undefined && <span className="text-muted-foreground">({step.slots} slots)</span>}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {result.data && !result.data.steps && (
                       <div className="mt-2 p-2 bg-muted rounded text-xs">
                         <pre className="whitespace-pre-wrap">
                           {JSON.stringify(result.data, null, 2)}
@@ -220,6 +282,21 @@ export function PMSTestModal({ open, onClose, officeId, officeName }: PMSTestMod
             <div className="text-center py-8 text-muted-foreground">
               Click "Run Tests" to start testing your PMS integration
             </div>
+          )}
+
+          {/* Debug Panel */}
+          {debugInfo.mode && (
+            <CareStackDebugPanel
+              mode={debugInfo.mode as 'mock' | 'sandbox' | 'live'}
+              baseUrl={debugInfo.baseUrl || ''}
+              credentialsPresent={{
+                vendorKey: !debugInfo.useMock,
+                accountKey: !debugInfo.useMock,
+                accountId: !debugInfo.useMock
+              }}
+              recentRequests={recentRequests}
+              circuitBreakers={debugInfo.circuitBreakers}
+            />
           )}
         </div>
       </DialogContent>
