@@ -20,9 +20,9 @@ export const ProductionReadinessCheck: React.FC = () => {
   const { data: checks, isLoading, refetch } = useQuery({
     queryKey: ['production-readiness', profile?.clinic_id],
     queryFn: async () => {
-      const { data, error } = await supabase.rpc('validate_production_readiness');
+      const { data, error } = await supabase.rpc('validate_production_readiness' as any);
       if (error) throw error;
-      return data as ReadinessCheck[];
+      return (data as any) as ReadinessCheck[];
     },
     enabled: !!profile?.clinic_id
   });
