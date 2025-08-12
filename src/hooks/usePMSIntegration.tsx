@@ -43,15 +43,39 @@ export function usePMSIntegration() {
     },
   });
 
-  // Create or update office (upsert to prevent duplicates)
+  // Create or update office with secure encryption
   const createOfficeMutation = useMutation({
-    mutationFn: async (officeData: OfficeInsert) => {
+    mutationFn: async (officeData: any) => {
+      // Use secure server-side encryption for credentials
+      let officeToCreate = { ...officeData };
+      
+      if (officeData.credentials) {
+        const officeId = crypto.randomUUID();
+        const { error: encryptError } = await supabase.functions.invoke('secure-pms-handler', {
+          body: {
+            action: 'encrypt_credentials',
+            officeId,
+            credentials: officeData.credentials
+          }
+        });
+
+        if (encryptError) throw encryptError;
+        
+        // Remove credentials from direct insert since edge function handles encryption
+        officeToCreate = {
+          ...officeData,
+          id: officeId,
+          credentials: undefined,
+          pms_credentials: undefined
+        };
+      }
+
       // Clean up any existing duplicate records first
       const { data: existing } = await supabase
         .from('offices')
         .select('id')
-        .eq('clinic_id', officeData.clinic_id!)
-        .eq('name', officeData.name);
+        .eq('clinic_id', officeToCreate.clinic_id!)
+        .eq('name', officeToCreate.name);
 
       if (existing && existing.length > 1) {
         // Keep the first one, delete the rest
@@ -66,7 +90,7 @@ export function usePMSIntegration() {
 
       const { data, error } = await supabase
         .from('offices')
-        .upsert(officeData, {
+        .upsert(officeToCreate, {
           onConflict: 'clinic_id,name',
           ignoreDuplicates: false
         })
@@ -83,10 +107,32 @@ export function usePMSIntegration() {
   });
 
   const updateOfficeMutation = useMutation({
-    mutationFn: async ({ id, ...updates }: OfficeUpdate & { id: string }) => {
+    mutationFn: async ({ id, ...updates }: any) => {
+      // Use secure server-side encryption for credentials
+      let updatesToApply = { ...updates };
+      
+      if (updates.credentials) {
+        const { error: encryptError } = await supabase.functions.invoke('secure-pms-handler', {
+          body: {
+            action: 'encrypt_credentials',
+            officeId: id,
+            credentials: updates.credentials
+          }
+        });
+
+        if (encryptError) throw encryptError;
+        
+        // Remove credentials from direct update since edge function handles it
+        updatesToApply = {
+          ...updates,
+          credentials: undefined,
+          pms_credentials: undefined
+        };
+      }
+
       const { data, error } = await supabase
         .from('offices')
-        .update(updates)
+        .update(updatesToApply)
         .eq('id', id)
         .select()
         .single();
@@ -100,7 +146,7 @@ export function usePMSIntegration() {
     },
   });
 
-  // PMS operations
+  // PMS operations with secure credential handling
   const pmsOperationMutation = useMutation({
     mutationFn: async ({ 
       action, 
@@ -111,11 +157,29 @@ export function usePMSIntegration() {
       officeId: string; 
       [key: string]: any 
     }) => {
+      // For PMS operations that need credentials, decrypt them securely
+      let enhancedParams = params;
+      if (officeId) {
+        const { data: credentialsData, error: credentialsError } = await supabase.functions.invoke('secure-pms-handler', {
+          body: {
+            action: 'decrypt_credentials',
+            officeId
+          }
+        });
+
+        if (!credentialsError && credentialsData?.credentials) {
+          enhancedParams = {
+            ...params,
+            credentials: credentialsData.credentials
+          };
+        }
+      }
+
       const { data, error } = await supabase.functions.invoke('pms-integrations', {
         body: {
           action,
           officeId,
-          ...params,
+          ...enhancedParams,
         },
       });
 
