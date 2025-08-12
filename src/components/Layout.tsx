@@ -15,7 +15,7 @@ interface LayoutProps {
 }
 
 const AuthCard = () => {
-  const { signIn } = useAuth();
+  const { signIn, error, clearError } = useAuth();
   const { toast } = useToast();
   const [email, setEmail] = React.useState('');
   const [loading, setLoading] = React.useState(false);
@@ -23,21 +23,24 @@ const AuthCard = () => {
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    try {
-      await signIn(email);
+    clearError();
+    
+    const result = await signIn(email);
+    
+    if (result.error) {
+      toast({
+        title: "Error",
+        description: result.error,
+        variant: "destructive",
+      });
+    } else {
       toast({
         title: "Magic link sent!",
         description: "Check your email for the sign-in link.",
       });
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to send magic link. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
     }
+    
+    setLoading(false);
   };
 
   return (
@@ -48,6 +51,20 @@ const AuthCard = () => {
           <CardDescription>Sign in to access your clinic dashboard</CardDescription>
         </CardHeader>
         <CardContent>
+          {error && (
+            <div className="mb-4 p-3 bg-destructive/10 border border-destructive/20 rounded-md">
+              <p className="text-sm text-destructive">{error}</p>
+              {error.includes('timeout') && (
+                <Button 
+                  variant="link" 
+                  className="p-0 h-auto text-destructive underline text-sm mt-1"
+                  onClick={() => window.location.reload()}
+                >
+                  Refresh page
+                </Button>
+              )}
+            </div>
+          )}
           <form onSubmit={handleSignIn} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
@@ -129,7 +146,7 @@ const Sidebar = () => {
 };
 
 export const Layout: React.FC<LayoutProps> = ({ children }) => {
-  const { user, loading } = useAuth();
+  const { user, loading, error } = useAuth();
 
   if (loading) {
     return (
@@ -137,6 +154,18 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
           <p className="mt-2 text-muted-foreground">Loading...</p>
+          {error && (
+            <div className="mt-4 p-3 bg-destructive/10 border border-destructive/20 rounded-md max-w-md">
+              <p className="text-sm text-destructive">{error}</p>
+              <Button 
+                variant="link" 
+                className="p-0 h-auto text-destructive underline text-sm mt-1"
+                onClick={() => window.location.reload()}
+              >
+                Refresh page
+              </Button>
+            </div>
+          )}
         </div>
         <DebugPanel />
       </div>
