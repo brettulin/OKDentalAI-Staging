@@ -46,25 +46,50 @@ export function VoiceLatencyTest() {
     const startTime = performance.now();
 
     try {
-      await synthesizeSpeech(
-        testText,
-        (aiSettings as any)?.voice_id,
-        aiSettings?.voice_model
-      );
+      // Measure only the API response time, not audio playback
+      const { data, error } = await supabase.functions.invoke('voice-synthesize', {
+        body: { 
+          text: testText, 
+          voiceId: (aiSettings as any)?.voice_id,
+          model: aiSettings?.voice_model
+        }
+      });
       
       const endTime = performance.now();
       const latency = endTime - startTime;
+
+      if (error) throw error;
 
       setResults({
         latency,
         success: latency < 1200, // Target: first byte < 1.2s
       });
 
-      console.log(`Voice synthesis latency test: ${latency.toFixed(0)}ms`);
+      console.log(`Voice synthesis API latency: ${latency.toFixed(0)}ms`);
+      
+      // Optionally play the audio without affecting latency measurement
+      if (data?.audioBase64) {
+        try {
+          const audioBlob = new Blob([
+            Uint8Array.from(atob(data.audioBase64), c => c.charCodeAt(0))
+          ], { type: data.mime || 'audio/mpeg' });
+          
+          const audio = new Audio(URL.createObjectURL(audioBlob));
+          audio.onended = () => URL.revokeObjectURL(audio.src);
+          audio.onerror = () => URL.revokeObjectURL(audio.src);
+          audio.play().catch(() => {}); // Ignore playback errors for the test
+        } catch (playbackError) {
+          // Ignore playback errors - we only care about API latency
+          console.log('Playback skipped for latency test');
+        }
+      }
     } catch (error) {
+      const endTime = performance.now();
+      const latency = endTime - startTime;
+      
       console.error('Latency test error:', error);
       setResults({
-        latency: 0,
+        latency,
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error'
       });
