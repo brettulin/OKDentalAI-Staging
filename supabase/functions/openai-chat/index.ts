@@ -33,18 +33,40 @@ serve(async (req) => {
       .eq('id', authContext.clinic_id)
       .single();
 
+    // Get providers and services for better context
+    const { data: providers } = await supabase
+      .from('providers')
+      .select('name, specialty')
+      .eq('clinic_id', authContext.clinic_id);
+
+    const { data: services } = await supabase
+      .from('services')
+      .select('name, duration_min')
+      .eq('clinic_id', authContext.clinic_id);
+
     // Build system prompt with clinic context
     const systemPrompt = `You are an AI receptionist for ${clinic?.name || 'the clinic'}. ${aiSettings?.custom_greeting || 'You help patients with appointments and basic questions.'} 
 
-Available services: ${clinic?.services?.join(', ') || 'General dental services'}
-Office hours: ${clinic?.business_hours ? Object.entries(clinic.business_hours).map(([day, hours]) => `${day}: ${hours}`).join(', ') : 'Please check our website for hours'}
+Available providers: ${providers?.map(p => `${p.name} (${p.specialty})`).join(', ') || 'General dental services'}
+Available services: ${services?.map(s => `${s.name} (${s.duration_min} min)`).join(', ') || 'General dental services'}
 
-Guidelines:
+IMPORTANT INSTRUCTIONS:
 - Be friendly, professional, and helpful
 - For appointments, collect: patient name, phone number, preferred date/time, service needed
+- Use the exact patient phone number format they provide for lookup
 - If you can't help with something, offer to have someone call them back
-- Keep responses concise and natural
-- Use the patient's name when you know it`;
+- Keep responses concise and natural (under 100 words)
+- Use the patient's name when you know it
+- For existing patients, confirm their information before booking
+- For new patients, collect basic information (name, phone, email if available)
+- Always suggest next available appointments if their preference isn't available
+- If they need urgent care, prioritize immediate scheduling
+
+CONVERSATION FLOW:
+1. Greet and ask how you can help
+2. If booking appointment: get patient phone → look up/create patient → find available slots → confirm booking
+3. If general inquiry: provide helpful information
+4. If complex issue: offer to transfer to staff member`;
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
