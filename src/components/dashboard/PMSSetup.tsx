@@ -36,8 +36,10 @@ export const PMSSetup = () => {
           break;
         case 'carestack':
           normalizedCredentials = {
-            apiKey: officeForm.credentials.apiKey,
-            baseUrl: officeForm.credentials.baseUrl
+            clientId: officeForm.credentials.clientId,
+            clientSecret: officeForm.credentials.clientSecret,
+            baseUrl: officeForm.credentials.baseUrl || 'https://api.carestack.com/v1',
+            useMockMode: true // Enable mock mode by default until live credentials are provided
           };
           break;
         case 'dentrix':
@@ -127,15 +129,29 @@ export const PMSSetup = () => {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="baseUrl">Base URL</Label>
+              <Label htmlFor="clientId">Client ID</Label>
               <Input
-                id="baseUrl"
-                placeholder="https://api.carestack.com"
-                value={officeForm.credentials.baseUrl || ''}
+                id="clientId"
+                value={officeForm.credentials.clientId || ''}
                 onChange={(e) => setOfficeForm({
                   ...officeForm,
-                  credentials: { ...officeForm.credentials, baseUrl: e.target.value }
+                  credentials: { ...officeForm.credentials, clientId: e.target.value }
                 })}
+                placeholder="Your CareStack Client ID"
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="clientSecret">Client Secret</Label>
+              <Input
+                id="clientSecret"
+                type="password"
+                value={officeForm.credentials.clientSecret || ''}
+                onChange={(e) => setOfficeForm({
+                  ...officeForm,
+                  credentials: { ...officeForm.credentials, clientSecret: e.target.value }
+                })}
+                placeholder="Your CareStack Client Secret"
                 required
               />
             </div>
