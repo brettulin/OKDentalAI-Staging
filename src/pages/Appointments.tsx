@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { BookingInterface } from '@/components/appointments/BookingInterface';
+import { SmartScheduler } from '@/components/appointments/SmartScheduler';
 import { SlotManager } from '@/components/appointments/SlotManager';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { EmptyState } from '@/components/EmptyState';
@@ -14,6 +15,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 const AppointmentsPage = () => {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('book');
+
+  if (!user) {
+    return <EmptyState title="Please sign in" description="You need to sign in to manage appointments" />;
+  }
 
   // Get user's clinic
   const { data: profile } = useQuery({
@@ -246,24 +251,36 @@ const AppointmentsPage = () => {
           </Card>
         </div>
 
-        {/* Right Column - Booking Interface */}
+        {/* Right Column - Booking Interface with Tabs */}
         <div>
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Plus className="h-5 w-5" />
-                Book New Appointment
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <BookingInterface 
-                onAppointmentBooked={(appointment) => {
-                  // Refresh all related queries when appointment is booked
-                  console.log('Appointment booked:', appointment);
-                }}
-              />
-            </CardContent>
-          </Card>
+          <Tabs defaultValue="booking" className="space-y-4">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="booking">Manual Booking</TabsTrigger>
+              <TabsTrigger value="smart">Smart AI Scheduler</TabsTrigger>
+            </TabsList>
+            
+            <TabsContent value="booking">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Plus className="h-5 w-5" />
+                    Book New Appointment
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <BookingInterface 
+                    onAppointmentBooked={(appointment) => {
+                      console.log('Appointment booked:', appointment);
+                    }}
+                  />
+                </CardContent>
+              </Card>
+            </TabsContent>
+            
+            <TabsContent value="smart">
+              <SmartScheduler />
+            </TabsContent>
+          </Tabs>
         </div>
       </div>
     </div>

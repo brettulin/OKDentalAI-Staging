@@ -5,7 +5,8 @@ import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Mic, MicOff, Phone, PhoneOff, Send, Volume2, Bot, User } from 'lucide-react';
 import { useAICallHandler } from '@/hooks/useAICallHandler';
-import { useVoiceInterface } from '@/hooks/useVoiceInterface';
+import { useAdvancedVoiceInterface } from '@/hooks/useAdvancedVoiceInterface';
+import { VoiceControls } from './VoiceControls';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/integrations/supabase/client';
@@ -60,11 +61,14 @@ export function CallSimulator({ officeId }: CallSimulatorProps) {
     isRecording,
     isPlaying,
     isProcessing,
+    canInterrupt,
+    audioLevel,
     startRecording,
     stopRecording,
     transcribeAudio,
-    synthesizeSpeech
-  } = useVoiceInterface();
+    synthesizeSpeech,
+    interruptSpeech
+  } = useAdvancedVoiceInterface();
 
   const handleStartCall = async () => {
     try {
@@ -172,28 +176,32 @@ export function CallSimulator({ officeId }: CallSimulatorProps) {
   };
 
   const handleVoiceRecord = async () => {
-    if (isRecording) {
-      try {
-        const audioBase64 = await stopRecording();
-        const transcription = await transcribeAudio(audioBase64, 'audio/webm');
-        
-        if (transcription) {
-          // Store audio artifact in call turn metadata
-          if (callId) {
-            console.log('Voice input transcribed:', { transcription, audioLength: audioBase64.length });
-          }
-          await handleSendMessage(transcription);
+    try {
+      const audioBase64 = await stopRecording();
+      const transcription = await transcribeAudio(audioBase64, 'audio/webm');
+      
+      if (transcription.trim()) {
+        // Store audio artifact in call turn metadata
+        if (callId) {
+          console.log('Voice input transcribed:', { transcription, audioLength: audioBase64.length });
         }
-      } catch (error) {
-        console.error('Voice recording error:', error);
-        toast({
-          title: "Voice Error",
-          description: "Failed to process voice input. Please try again.",
-          variant: "destructive",
-        });
+        await handleSendMessage(transcription);
       }
-    } else {
+    } catch (error) {
+      console.error('Voice recording error:', error);
+      toast({
+        title: "Voice Error",
+        description: "Failed to process voice input. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleStartVoiceRecording = async () => {
+    try {
       await startRecording();
+    } catch (error) {
+      console.error('Error starting recording:', error);
     }
   };
 
@@ -330,13 +338,17 @@ export function CallSimulator({ officeId }: CallSimulatorProps) {
               />
               
               {useVoice && (
-                <Button 
-                  onClick={handleVoiceRecord}
-                  disabled={!callId || isProcessingMessage || isProcessing}
-                  variant={isRecording ? "destructive" : "outline"}
-                >
-                  {isRecording ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-                </Button>
+                <VoiceControls
+                  isRecording={isRecording}
+                  isPlaying={isPlaying}
+                  isProcessing={isProcessing}
+                  canInterrupt={canInterrupt}
+                  audioLevel={audioLevel}
+                  onStartRecording={handleStartVoiceRecording}
+                  onStopRecording={handleVoiceRecord}
+                  onInterrupt={interruptSpeech}
+                  disabled={!callId || isProcessingMessage}
+                />
               )}
               
               <Button 
