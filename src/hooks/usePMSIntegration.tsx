@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { encryptData, decryptData } from '@/utils/encryption';
 import type { Database } from '@/integrations/supabase/types';
 
 type OfficeRow = Database['public']['Tables']['offices']['Row'];

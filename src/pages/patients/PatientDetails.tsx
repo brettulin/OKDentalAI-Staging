@@ -3,6 +3,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Edit, Trash2, Calendar, Phone, Mail, User } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { useSecurity } from "@/components/security/SecurityProvider";
+import { SecurityBanner } from "@/components/security/SecurityBanner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -24,12 +26,16 @@ export default function PatientDetails() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { profile } = useAuth();
+  const { hasPermission, logSecurityEvent } = useSecurity();
   const queryClient = useQueryClient();
 
   const { data: patient, isLoading } = useQuery({
     queryKey: ['patient', id],
     queryFn: async () => {
       if (!id) throw new Error('Patient ID required');
+
+      // Log patient data access
+      logSecurityEvent('view_patient', 'patient', id);
 
       const { data, error } = await supabase
         .from('patients')
@@ -88,6 +94,7 @@ export default function PatientDetails() {
 
   return (
     <div className="space-y-6">
+      <SecurityBanner />
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-4">
           <Button variant="ghost" asChild>

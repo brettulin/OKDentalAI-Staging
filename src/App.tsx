@@ -16,6 +16,7 @@ import QA from '@/pages/QA';
 import NotFound from '@/pages/NotFound';
 import { Layout } from '@/components/Layout';
 import { AuthProvider } from '@/hooks/useAuth';
+import { SecurityProvider } from '@/components/security/SecurityProvider';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { PageSkeleton } from '@/components/PageSkeleton';
 
@@ -23,8 +24,9 @@ function App() {
   return (
     <ErrorBoundary>
       <AuthProvider>
-        <Router>
-          <Layout>
+        <SecurityProvider>
+          <Router>
+            <Layout>
             <Suspense fallback={<PageSkeleton />}>
               <Routes>
                 <Route path="/" element={<ErrorBoundary><Index /></ErrorBoundary>} />
@@ -46,8 +48,9 @@ function App() {
             </Suspense>
           </Layout>
         </Router>
-      </AuthProvider>
-    </ErrorBoundary>
+      </SecurityProvider>
+    </AuthProvider>
+  </ErrorBoundary>
   );
 }
 

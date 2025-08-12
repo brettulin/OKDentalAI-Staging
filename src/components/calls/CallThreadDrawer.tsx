@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { supabase } from '@/integrations/supabase/client';
+import { useSecurity } from '@/components/security/SecurityProvider';
 import { MessageSquare, User, Bot, Clock } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
@@ -39,9 +40,13 @@ export const CallThreadDrawer = ({ call, children }: CallThreadDrawerProps) => {
   const [turns, setTurns] = useState<Turn[]>([]);
   const [loading, setLoading] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
+  const { logSecurityEvent } = useSecurity();
 
   const fetchTurns = async () => {
     if (!call.id) return;
+    
+    // Log call transcript access
+    logSecurityEvent('view_transcript', 'call', call.id);
     
     setLoading(true);
     try {
