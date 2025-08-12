@@ -96,6 +96,48 @@ export const decryptData = async (encryptedData: string, keyString?: string): Pr
   }
 };
 
+// Field-level encryption for sensitive patient data
+export const encryptPatientField = async (data: string, fieldType: 'ssn' | 'dob' | 'phone' | 'email'): Promise<string> => {
+  try {
+    // Generate field-specific salt
+    const salt = `patient_${fieldType}_${Date.now()}`;
+    const combinedData = `${salt}:${data}`;
+    
+    return await encryptData(combinedData);
+  } catch (error) {
+    console.error(`Failed to encrypt ${fieldType}:`, error);
+    throw new Error(`Failed to encrypt ${fieldType}`);
+  }
+};
+
+export const decryptPatientField = async (encryptedData: string, fieldType: 'ssn' | 'dob' | 'phone' | 'email'): Promise<string> => {
+  try {
+    const decrypted = await decryptData(encryptedData);
+    const [salt, data] = decrypted.split(':', 2);
+    
+    // Verify salt format
+    if (!salt.startsWith(`patient_${fieldType}_`)) {
+      throw new Error('Invalid encrypted data format');
+    }
+    
+    return data || '';
+  } catch (error) {
+    console.error(`Failed to decrypt ${fieldType}:`, error);
+    return '';
+  }
+};
+
+// Secure data comparison without decryption
+export const compareEncryptedField = async (plainText: string, encryptedData: string, fieldType: 'ssn' | 'dob' | 'phone' | 'email'): Promise<boolean> => {
+  try {
+    const decrypted = await decryptPatientField(encryptedData, fieldType);
+    return decrypted === plainText;
+  } catch (error) {
+    console.error('Failed to compare encrypted field:', error);
+    return false;
+  }
+};
+
 // Mask sensitive data for display
 export const maskSensitiveData = (data: string, visibleChars: number = 4): string => {
   if (!data || data.length <= visibleChars) return data;
