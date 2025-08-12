@@ -1,78 +1,117 @@
-# CareStack Integration - Switch to Live Documentation
+# CareStack Integration: Switch to Live Mode
 
 ## Overview
-The CareStack integration is currently running in **mock mode** with simulated data. This document explains how to switch to live API calls once you have real CareStack credentials.
 
-## Current Status
-✅ **Completed:**
-- Full CareStack adapter with OAuth2 authentication
-- All 5 edge functions (locations, operatories, search patients, create patient, create appointment)
-- Mock data system with realistic schemas
-- Database integration with external_id mapping
-- UI components for testing and configuration
-- Error handling and retry logic
+This document provides instructions on how to switch the CareStack integration from mock mode to live API calls using real credentials.
+
+## Current Status: Mock Mode
+
+The CareStack integration is currently running in mock mode, which means:
+- All API calls return simulated data
+- No actual requests are made to CareStack servers
+- Artificial latency and occasional failures are simulated for testing
+
+## Prerequisites
+
+Before switching to live mode, ensure you have:
+
+1. **CareStack Subscription**: An active CareStack account with API access
+2. **API Credentials**: Valid CareStack API credentials (VendorKey, AccountKey, and AccountId)
+3. **API Access**: Confirmed API access permissions from CareStack support
+
+## CareStack Authentication
+
+CareStack uses header-based authentication with three required credentials:
+
+- **VendorKey**: Secret key for the vendor (your organization)
+- **AccountKey**: Secret key for the specific account
+- **AccountId**: Unique identifier for the account
+
+These credentials must be passed in the HTTP headers for all API requests.
+
+## Required Secrets
+
+The following secrets need to be configured in your Supabase project:
+
+- `CARESTACK_BASE_URL`: The CareStack API base URL (e.g., `https://api.carestack.com/v1`)
+- `CARESTACK_VENDOR_KEY`: Your CareStack Vendor Key
+- `CARESTACK_ACCOUNT_KEY`: Your CareStack Account Key
+- `CARESTACK_ACCOUNT_ID`: Your CareStack Account ID
+- `CARESTACK_USE_MOCK`: Set to `false` to enable live mode
 
 ## Switching to Live Mode
 
-### 1. Prerequisites
-- Active CareStack subscription
-- API access enabled by CareStack support
-- Client ID and Client Secret from CareStack
+### 1. Configure Secrets
 
-### 2. Required Secrets
-Add these secrets in Supabase Edge Functions settings:
+Add the required secrets in your Supabase project settings:
 
-```bash
-CARESTACK_BASE_URL=https://api.carestack.com/v1
-CARESTACK_CLIENT_ID=your_client_id_here
-CARESTACK_CLIENT_SECRET=your_client_secret_here
-CARESTACK_USE_MOCK=false  # This disables mock mode
-```
+1. Go to your Supabase dashboard
+2. Navigate to Settings > Edge Functions
+3. Add each secret with the values provided by CareStack
 
-### 3. Update Office Configuration
+### 2. Update Office Configuration
+
 In the PMS Setup page:
-1. Edit your CareStack office configuration
-2. Add your real Client ID and Client Secret
-3. Set `useMockMode: false` in the credentials
 
-### 4. Verification Steps
-1. Test connection in PMS Settings → CareStack tab
-2. Verify locations load from live API
-3. Test patient search with real data
-4. Confirm appointment booking works
+1. Navigate to PMS Setup in your dashboard
+2. Create or edit your CareStack office configuration
+3. Enter your real CareStack credentials (VendorKey, AccountKey, AccountId)
+4. Set `useMockMode: false` in the advanced settings
 
-## Mock vs Live Behavior
+### 3. Verify Configuration
+
+Test the connection to ensure everything is working:
+
+1. Use the "Test Connection" button in PMS Setup
+2. Verify that real locations are loaded (not mock data)
+3. Test patient search functionality
+4. Try booking a test appointment
+
+## Expected Behavior Changes
 
 ### Mock Mode (Current)
-- Uses local simulated data
-- 200-500ms artificial latency
-- 4% simulated failure rate
-- No network calls to CareStack
-- Yellow "Mock Mode" banners displayed
+- Returns simulated patient and appointment data
+- Artificial latency (200-500ms)
+- Random failure simulation (4% failure rate)
+- Mock data banners displayed in UI
+- All operations are reversible and safe
 
 ### Live Mode (After Switch)
-- Real OAuth2 authentication with CareStack
-- Actual API calls to CareStack servers
-- Real patient and appointment data
-- Production error handling
-- No mock mode banners
+- Real data from your CareStack database
+- Actual API response times
+- Real error handling and rate limiting
+- No mock banners
+- **LIVE DATA**: All changes are permanent
+
+## Authentication Method
+
+The integration uses CareStack's standard HTTP header authentication:
+
+```
+VendorKey: your_vendor_key
+AccountKey: your_account_key  
+AccountId: your_account_id
+```
+
+This method is more secure than OAuth2 for server-to-server communications and aligns with CareStack's API documentation.
 
 ## Troubleshooting
 
 ### Common Issues
-1. **Authentication Errors**: Verify Client ID/Secret are correct
-2. **Rate Limiting**: CareStack has API rate limits
-3. **Permissions**: Ensure API access is enabled for your account
+
+1. **Authentication Errors**: Verify your VendorKey, AccountKey, and AccountId
+2. **Network Timeouts**: Check your CareStack API base URL
+3. **Rate Limiting**: CareStack may have API rate limits
+4. **Permissions**: Ensure your API credentials have the required permissions
 
 ### Support
-- CareStack API Documentation: [CareStack Developer Portal]
-- Contact CareStack support for API access issues
 
-## Testing Checklist
-- [ ] Connection test passes
-- [ ] Patient search returns real data  
-- [ ] Appointment booking creates real appointments
-- [ ] Error handling works properly
-- [ ] No mock mode banners visible
+For CareStack-specific API issues, contact CareStack support.
+For integration issues, check the edge function logs in your Supabase dashboard.
 
-The integration is production-ready once these steps are completed!
+## Important Notes
+
+- **Test First**: Always test in a non-production environment
+- **Backup**: Ensure you have backups before making changes
+- **Monitor**: Monitor API usage and costs after switching to live mode
+- **Rollback**: Keep mock mode available for testing and development

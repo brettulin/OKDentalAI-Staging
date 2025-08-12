@@ -11,6 +11,7 @@ import {
 } from './pms-interface.ts'
 
 import {
+  CareStackCredentials,
   CareStackPatient,
   CareStackLocation,
   CareStackOperatory,
@@ -24,7 +25,6 @@ import {
   CareStackListOperatoriesResponse,
   CareStackCache,
   CareStackCacheItem,
-  CareStackAuthResponse,
   CareStackErrorResponse
 } from './carestack-types.ts'
 
@@ -41,14 +41,12 @@ import {
 } from './carestack-mock-data.ts'
 
 export class CareStackAdapter implements PMSInterface {
-  private credentials: any
+  private credentials: CareStackCredentials
   private baseUrl: string
-  private accessToken?: string
-  private tokenExpiry?: number
   private useMockMode: boolean
   private cache: CareStackCache
 
-  constructor(credentials: any) {
+  constructor(credentials: CareStackCredentials) {
     this.credentials = credentials
     this.baseUrl = credentials.baseUrl || Deno.env.get('CARESTACK_BASE_URL') || 'https://api.carestack.com/v1'
     this.useMockMode = credentials.useMockMode ?? (Deno.env.get('CARESTACK_USE_MOCK') === 'true')
@@ -60,46 +58,26 @@ export class CareStackAdapter implements PMSInterface {
     
     console.log('CareStack adapter initialized:', {
       mockMode: this.useMockMode,
-      baseUrl: this.baseUrl
+      baseUrl: this.baseUrl,
+      accountId: this.credentials.accountId
     })
   }
 
-  private async getAccessToken(): Promise<string> {
+  private getAuthHeaders(): Record<string, string> {
     if (this.useMockMode) {
-      await addArtificialLatency(100, 200)
-      return 'mock_access_token_' + Date.now()
-    }
-
-    // Check if we have a valid cached token
-    if (this.accessToken && this.tokenExpiry && Date.now() < this.tokenExpiry) {
-      return this.accessToken
-    }
-
-    try {
-      const response = await fetch(`${this.baseUrl}/oauth/token`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          grant_type: 'client_credentials',
-          client_id: this.credentials.clientId || Deno.env.get('CARESTACK_CLIENT_ID'),
-          client_secret: this.credentials.clientSecret || Deno.env.get('CARESTACK_CLIENT_SECRET'),
-        }),
-      })
-
-      if (!response.ok) {
-        throw new Error(`Failed to get CareStack token: ${response.statusText}`)
+      return {
+        'Content-Type': 'application/json',
+        'VendorKey': 'mock_vendor_key',
+        'AccountKey': 'mock_account_key',
+        'AccountId': 'mock_account_id'
       }
+    }
 
-      const data: CareStackAuthResponse = await response.json()
-      this.accessToken = data.access_token
-      this.tokenExpiry = Date.now() + (data.expires_in * 1000) - 60000 // Subtract 1 minute for safety
-
-      return this.accessToken
-    } catch (error) {
-      console.error('Error getting CareStack token:', error)
-      throw new Error('Failed to authenticate with CareStack')
+    return {
+      'Content-Type': 'application/json',
+      'VendorKey': this.credentials.vendorKey || Deno.env.get('CARESTACK_VENDOR_KEY') || '',
+      'AccountKey': this.credentials.accountKey || Deno.env.get('CARESTACK_ACCOUNT_KEY') || '',
+      'AccountId': this.credentials.accountId || Deno.env.get('CARESTACK_ACCOUNT_ID') || ''
     }
   }
 
@@ -115,13 +93,12 @@ export class CareStackAdapter implements PMSInterface {
       throw new Error('Mock implementation needed for endpoint: ' + endpoint)
     }
 
-    const token = await this.getAccessToken()
+    const authHeaders = this.getAuthHeaders()
     
     const response = await fetch(`${this.baseUrl}${endpoint}`, {
       ...options,
       headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
+        ...authHeaders,
         ...options.headers,
       },
     })
@@ -138,8 +115,7 @@ export class CareStackAdapter implements PMSInterface {
         throw new Error('Rate limit exceeded')
       }
       if (response.status === 401) {
-        this.accessToken = undefined // Force token refresh
-        throw new Error('Authentication failed')
+        throw new Error('Authentication failed - please check your credentials')
       }
       
       throw new Error(`CareStack API error: ${response.statusText}`)

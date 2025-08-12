@@ -36,8 +36,9 @@ export const PMSSetup = () => {
           break;
         case 'carestack':
           normalizedCredentials = {
-            clientId: officeForm.credentials.clientId,
-            clientSecret: officeForm.credentials.clientSecret,
+            vendorKey: officeForm.credentials.vendorKey,
+            accountKey: officeForm.credentials.accountKey,
+            accountId: officeForm.credentials.accountId,
             baseUrl: officeForm.credentials.baseUrl || 'https://api.carestack.com/v1',
             useMockMode: true // Enable mock mode by default until live credentials are provided
           };
@@ -116,43 +117,56 @@ export const PMSSetup = () => {
         return (
           <>
             <div className="space-y-2">
-              <Label htmlFor="apiKey">API Key</Label>
+              <Label htmlFor="vendorKey">Vendor Key</Label>
               <Input
-                id="apiKey"
+                id="vendorKey"
                 type="password"
-                value={officeForm.credentials.apiKey || ''}
+                value={officeForm.credentials.vendorKey || ''}
                 onChange={(e) => setOfficeForm({
                   ...officeForm,
-                  credentials: { ...officeForm.credentials, apiKey: e.target.value }
+                  credentials: { ...officeForm.credentials, vendorKey: e.target.value }
                 })}
+                placeholder="Your CareStack Vendor Key"
                 required
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="clientId">Client ID</Label>
+              <Label htmlFor="accountKey">Account Key</Label>
               <Input
-                id="clientId"
-                value={officeForm.credentials.clientId || ''}
+                id="accountKey"
+                type="password"
+                value={officeForm.credentials.accountKey || ''}
                 onChange={(e) => setOfficeForm({
                   ...officeForm,
-                  credentials: { ...officeForm.credentials, clientId: e.target.value }
+                  credentials: { ...officeForm.credentials, accountKey: e.target.value }
                 })}
-                placeholder="Your CareStack Client ID"
+                placeholder="Your CareStack Account Key"
                 required
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="clientSecret">Client Secret</Label>
+              <Label htmlFor="accountId">Account ID</Label>
               <Input
-                id="clientSecret"
-                type="password"
-                value={officeForm.credentials.clientSecret || ''}
+                id="accountId"
+                value={officeForm.credentials.accountId || ''}
                 onChange={(e) => setOfficeForm({
                   ...officeForm,
-                  credentials: { ...officeForm.credentials, clientSecret: e.target.value }
+                  credentials: { ...officeForm.credentials, accountId: e.target.value }
                 })}
-                placeholder="Your CareStack Client Secret"
+                placeholder="Your CareStack Account ID"
                 required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="baseUrl">API Base URL</Label>
+              <Input
+                id="baseUrl"
+                placeholder="https://api.carestack.com/v1"
+                value={officeForm.credentials.baseUrl || ''}
+                onChange={(e) => setOfficeForm({
+                  ...officeForm,
+                  credentials: { ...officeForm.credentials, baseUrl: e.target.value }
+                })}
               />
             </div>
           </>

@@ -1,10 +1,11 @@
-// CareStack API Types based on Swagger specification
+// CareStack API Types based on API documentation
 
-export interface CareStackAuthResponse {
-  access_token: string
-  token_type: string
-  expires_in: number
-  scope: string
+export interface CareStackCredentials {
+  vendorKey: string
+  accountKey: string
+  accountId: string
+  baseUrl?: string
+  useMockMode?: boolean
 }
 
 export interface CareStackPatient {

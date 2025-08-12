@@ -8,8 +8,9 @@ global.Deno = {
       const mockEnv = {
         'CARESTACK_USE_MOCK': 'true',
         'CARESTACK_BASE_URL': 'https://api.carestack.com/v1',
-        'CARESTACK_CLIENT_ID': 'mock_client_id',
-        'CARESTACK_CLIENT_SECRET': 'mock_client_secret'
+        'CARESTACK_VENDOR_KEY': 'mock_vendor_key',
+        'CARESTACK_ACCOUNT_KEY': 'mock_account_key',
+        'CARESTACK_ACCOUNT_ID': 'mock_account_id'
       }
       return mockEnv[key]
     })
@@ -19,8 +20,9 @@ global.Deno = {
 describe('CareStackAdapter', () => {
   let adapter: CareStackAdapter
   const mockCredentials = {
-    clientId: 'test_client_id',
-    clientSecret: 'test_client_secret',
+    vendorKey: 'test_vendor_key',
+    accountKey: 'test_account_key', 
+    accountId: 'test_account_id',
     baseUrl: 'https://api.carestack.com/v1',
     useMockMode: true
   }
@@ -30,9 +32,12 @@ describe('CareStackAdapter', () => {
   })
 
   describe('Authentication', () => {
-    it('should return mock token in mock mode', async () => {
-      const token = await (adapter as any).getAccessToken()
-      expect(token).toMatch(/^mock_access_token_/)
+    it('should generate correct auth headers in mock mode', async () => {
+      const headers = (adapter as any).getAuthHeaders()
+      expect(headers).toHaveProperty('VendorKey', 'mock_vendor_key')
+      expect(headers).toHaveProperty('AccountKey', 'mock_account_key')
+      expect(headers).toHaveProperty('AccountId', 'mock_account_id')
+      expect(headers).toHaveProperty('Content-Type', 'application/json')
     })
   })
 
