@@ -274,6 +274,7 @@ const AISettingsPage = () => {
                     <SelectItem value="JBFqnCBsd6RMkjVDRZzb">George (Male)</SelectItem>
                     <SelectItem value="N2lVS1w4EtoT3dr4eOWO">Callum (Male)</SelectItem>
                     <SelectItem value="SAz9YHcvj6GT2YYXdXww">River (Female)</SelectItem>
+                    <SelectItem value="sIak7pFapfSLCfctxdOu">Clarice (Female)</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
