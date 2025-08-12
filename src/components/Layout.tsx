@@ -43,6 +43,11 @@ const AuthCard = () => {
     setLoading(false);
   };
 
+  const handleRequestNewLink = () => {
+    clearError();
+    setEmail('');
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-background">
       <Card className="w-full max-w-md">
@@ -54,15 +59,26 @@ const AuthCard = () => {
           {error && (
             <div className="mb-4 p-3 bg-destructive/10 border border-destructive/20 rounded-md">
               <p className="text-sm text-destructive">{error}</p>
-              {error.includes('timeout') && (
-                <Button 
-                  variant="link" 
-                  className="p-0 h-auto text-destructive underline text-sm mt-1"
-                  onClick={() => window.location.reload()}
-                >
-                  Refresh page
-                </Button>
-              )}
+              <div className="flex gap-2 mt-2">
+                {error.includes('timeout') || error.includes('refresh') ? (
+                  <Button 
+                    variant="link" 
+                    className="p-0 h-auto text-destructive underline text-sm"
+                    onClick={() => window.location.reload()}
+                  >
+                    Refresh page
+                  </Button>
+                ) : null}
+                {error.includes('expired') || error.includes('invalid') ? (
+                  <Button 
+                    variant="link" 
+                    className="p-0 h-auto text-destructive underline text-sm"
+                    onClick={handleRequestNewLink}
+                  >
+                    Request new link
+                  </Button>
+                ) : null}
+              </div>
             </div>
           )}
           <form onSubmit={handleSignIn} className="space-y-4">

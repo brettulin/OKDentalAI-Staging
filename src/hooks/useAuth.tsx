@@ -2,6 +2,26 @@ import React, { createContext, useContext, useEffect, useState, useRef } from 'r
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 
+// Helper function to parse URL parameters for auth errors
+const parseAuthError = () => {
+  const urlParams = new URLSearchParams(window.location.search);
+  const error = urlParams.get('error');
+  const errorDescription = urlParams.get('error_description');
+  
+  if (error) {
+    // Clear URL parameters after parsing
+    window.history.replaceState({}, document.title, window.location.pathname);
+    
+    if (error === 'access_denied' || errorDescription?.includes('expired')) {
+      return 'Your magic link has expired. Please request a new one.';
+    }
+    
+    return errorDescription || 'Authentication failed. Please try again.';
+  }
+  
+  return null;
+};
+
 interface AuthContextType {
   user: User | null;
   session: Session | null;
@@ -24,12 +44,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const timeoutRef = useRef<NodeJS.Timeout>();
 
   useEffect(() => {
+    // Check for auth errors in URL first
+    const urlError = parseAuthError();
+    if (urlError) {
+      setError(urlError);
+      setLoading(false);
+      return;
+    }
+
     // Set timeout to prevent infinite loading
     timeoutRef.current = setTimeout(() => {
       console.warn('Auth initialization timeout - clearing loading state');
       setLoading(false);
-      setError('Authentication timeout. Please refresh the page.');
-    }, 10000); // 10 second timeout
+      setError('Authentication timeout. Please refresh the page and try again.');
+    }, 8000); // Reduced to 8 seconds
 
     // Listen for auth changes FIRST
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
@@ -41,16 +69,41 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           clearTimeout(timeoutRef.current);
         }
 
-        setSession(newSession);
-        setUser(newSession?.user ?? null);
-        setError(null);
-        
-        if (newSession?.user) {
-          // Use setTimeout to defer the fetchProfile call to avoid potential deadlock
+        // Handle sign out explicitly
+        if (event === 'SIGNED_OUT') {
+          setSession(null);
+          setUser(null);
+          setProfile(null);
+          setError(null);
+          setLoading(false);
+          return;
+        }
+
+        // Handle sign in events
+        if (event === 'SIGNED_IN' && newSession?.user) {
+          setSession(newSession);
+          setUser(newSession.user);
+          setError(null);
+          
+          // Use setTimeout to defer the fetchProfile call
           setTimeout(() => {
             fetchProfile(newSession.user.id);
           }, 0);
-        } else {
+          return;
+        }
+
+        // Handle token refresh
+        if (event === 'TOKEN_REFRESHED' && newSession) {
+          setSession(newSession);
+          setUser(newSession.user);
+          return;
+        }
+
+        // For any other case, update state accordingly
+        setSession(newSession);
+        setUser(newSession?.user ?? null);
+        
+        if (!newSession?.user) {
           setProfile(null);
           setLoading(false);
         }
