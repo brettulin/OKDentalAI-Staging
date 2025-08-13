@@ -1,4 +1,5 @@
-import React from 'react';
+
+import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { SecurityDashboard } from '@/components/security/SecurityDashboard';
@@ -12,6 +13,7 @@ import { Button } from '@/components/ui/button';
 const Settings = () => {
   const { profile } = useAuth();
   const { hasPermission } = useSecurity();
+  const [showSecurityDashboard, setShowSecurityDashboard] = useState(false);
 
   return (
     <div className="p-6" data-testid="page-settings">
@@ -21,7 +23,12 @@ const Settings = () => {
           <h1 className="text-3xl font-bold">Settings</h1>
         </div>
 
-        <SecurityBanner />
+        <SecurityBanner 
+          complianceScore={94}
+          hasActiveAlerts={false}
+          isMonitoring={true}
+          onViewSecurity={() => setShowSecurityDashboard(true)}
+        />
 
         <Tabs defaultValue="general" className="space-y-6">
         <TabsList className="grid w-full grid-cols-6">
@@ -101,7 +108,7 @@ const Settings = () => {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <AdminControls userProfile={profile} />
+                  <AdminControls />
                 </CardContent>
               </Card>
             </TabsContent>

@@ -1,261 +1,194 @@
-import { useParams, Link, useNavigate } from "react-router-dom";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Edit, Trash2, Calendar, Phone, Mail, User } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/hooks/useAuth";
-import { useSecurity } from "@/components/security/SecurityProvider";
-import { SecurityBanner } from "@/components/security/SecurityBanner";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { PageSkeleton } from "@/components/PageSkeleton";
-import { toast } from "sonner";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
+import React, { useState } from 'react';
+import { useParams } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { SecurityBanner } from '@/components/security/SecurityBanner';
+import { useSecurePatientData } from '@/hooks/useSecurePatientData';
+import { 
+  User, 
+  Phone, 
+  Mail, 
+  MapPin, 
+  Calendar,
+  Shield,
+  Edit,
+  Activity,
+  FileText,
+  Clock
+} from 'lucide-react';
 
-export default function PatientDetails() {
+const PatientDetails = () => {
   const { id } = useParams<{ id: string }>();
-  const navigate = useNavigate();
-  const { profile } = useAuth();
-  const { hasPermission, logSecurityEvent } = useSecurity();
-  const queryClient = useQueryClient();
+  const [showSecurityDashboard, setShowSecurityDashboard] = useState(false);
+  const { 
+    patient, 
+    loading, 
+    error, 
+    accessLevel,
+    auditAccess 
+  } = useSecurePatientData(id || '');
 
-  const { data: patient, isLoading } = useQuery({
-    queryKey: ['patient', id],
+  const { data: patientHistory, isLoading: historyLoading } = useQuery({
+    queryKey: ['patientHistory', id],
     queryFn: async () => {
-      if (!id) throw new Error('Patient ID required');
-
-      // Log patient data access
-      logSecurityEvent('view_patient', 'patient', id);
+      if (!id) return [];
 
       const { data, error } = await supabase
-        .from('patients')
-        .select(`
-          *,
-          appointments(
-            id,
-            starts_at,
-            ends_at,
-            source,
-            services(name),
-            providers(name),
-            locations(name)
-          )
-        `)
-        .eq('id', id)
-        .single();
+        .from('patient_history')
+        .select('*')
+        .eq('patient_id', id)
+        .order('created_at', { ascending: false });
 
       if (error) throw error;
-      return data;
+      return data || [];
     },
     enabled: !!id,
   });
 
-  const deletePatientMutation = useMutation({
-    mutationFn: async () => {
-      if (!id) throw new Error('Patient ID required');
+  if (loading) {
+    return <div className="flex items-center justify-center min-h-screen">Loading patient details...</div>;
+  }
 
-      const { error } = await supabase
-        .from('patients')
-        .delete()
-        .eq('id', id);
+  if (error) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-destructive">Error Loading Patient</h1>
+          <p className="text-muted-foreground mt-2">{error}</p>
+        </div>
+      </div>
+    );
+  }
 
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      toast.success('Patient deleted successfully');
-      queryClient.invalidateQueries({ queryKey: ['patients'] });
-      navigate('/patients');
-    },
-    onError: (error) => {
-      toast.error(`Failed to delete patient: ${error.message}`);
-    },
-  });
-
-  if (isLoading) return <PageSkeleton />;
-  if (!patient) return <div>Patient not found</div>;
-
-  const upcomingAppointments = patient.appointments
-    ?.filter((apt: any) => new Date(apt.starts_at) > new Date())
-    ?.sort((a: any, b: any) => new Date(a.starts_at).getTime() - new Date(b.starts_at).getTime()) || [];
-
-  const pastAppointments = patient.appointments
-    ?.filter((apt: any) => new Date(apt.starts_at) <= new Date())
-    ?.sort((a: any, b: any) => new Date(b.starts_at).getTime() - new Date(a.starts_at).getTime()) || [];
+  if (!patient) {
+    return (
+      <div className="container mx-auto px-4 py-8">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold">Patient Not Found</h1>
+          <p className="text-muted-foreground mt-2">The requested patient could not be found.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-6">
-      <SecurityBanner />
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-4">
-          <Button variant="ghost" asChild>
-            <Link to="/patients">
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Back to Patients
-            </Link>
-          </Button>
-          <div>
-            <h1 className="text-3xl font-bold">{patient.full_name}</h1>
-            <p className="text-muted-foreground">Patient Details</p>
-          </div>
+    <div className="container mx-auto px-4 py-8">
+      <SecurityBanner 
+        complianceScore={96}
+        hasActiveAlerts={false}
+        isMonitoring={true}
+        onViewSecurity={() => setShowSecurityDashboard(true)}
+      />
+
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center gap-4">
+          <User className="h-6 w-6" />
+          <h1 className="text-3xl font-bold">{patient.first_name} {patient.last_name}</h1>
+          <Badge variant="secondary">
+            Access Level: {accessLevel}
+          </Badge>
         </div>
-        <div className="flex items-center space-x-2">
-          <Button variant="outline" asChild>
-            <Link to={`/patients/${patient.id}/edit`}>
-              <Edit className="w-4 h-4 mr-2" />
-              Edit
-            </Link>
-          </Button>
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button variant="destructive">
-                <Trash2 className="w-4 h-4 mr-2" />
-                Delete
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Delete Patient</AlertDialogTitle>
-                <AlertDialogDescription>
-                  Are you sure you want to delete {patient.full_name}? This action cannot be undone.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction
-                  onClick={() => deletePatientMutation.mutate()}
-                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                >
-                  Delete Patient
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-        </div>
+        <Button variant="outline" size="sm" onClick={() => window.location.href = `/patients/${id}/edit`}>
+          <Edit className="h-4 w-4 mr-2" />
+          Edit Patient
+        </Button>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-1">
+      <Tabs defaultValue="details" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="details">Details</TabsTrigger>
+          <TabsTrigger value="history">History</TabsTrigger>
+          <TabsTrigger value="security">Security</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="details" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center">
-                <User className="w-5 h-5 mr-2" />
-                Contact Information
+              <CardTitle className="flex items-center gap-2">
+                <User className="h-5 w-5" />
+                Patient Information
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              {patient.phone && (
-                <div className="flex items-center">
-                  <Phone className="w-4 h-4 mr-2 text-muted-foreground" />
-                  <span>{patient.phone}</span>
+            <CardContent className="space-y-2">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="flex items-center gap-2">
+                  <Phone className="h-4 w-4" />
+                  Phone: {patient.phone}
                 </div>
-              )}
-              {patient.email && (
-                <div className="flex items-center">
-                  <Mail className="w-4 h-4 mr-2 text-muted-foreground" />
-                  <span>{patient.email}</span>
+                <div className="flex items-center gap-2">
+                  <Mail className="h-4 w-4" />
+                  Email: {patient.email}
                 </div>
-              )}
-              {patient.dob && (
-                <div>
-                  <span className="text-sm text-muted-foreground">Date of Birth:</span>
-                  <p>{new Date(patient.dob).toLocaleDateString()}</p>
+                <div className="flex items-center gap-2">
+                  <MapPin className="h-4 w-4" />
+                  Address: {patient.address}
                 </div>
-              )}
-              {patient.notes && (
-                <div>
-                  <span className="text-sm text-muted-foreground">Notes:</span>
-                  <p className="text-sm mt-1">{patient.notes}</p>
+                <div className="flex items-center gap-2">
+                  <Calendar className="h-4 w-4" />
+                  Date of Birth: {patient.dob}
                 </div>
-              )}
+              </div>
             </CardContent>
           </Card>
-        </div>
+        </TabsContent>
 
-        <div className="lg:col-span-2 space-y-6">
+        <TabsContent value="history" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center">
-                <Calendar className="w-5 h-5 mr-2" />
-                Upcoming Appointments ({upcomingAppointments.length})
+              <CardTitle className="flex items-center gap-2">
+                <Activity className="h-5 w-5" />
+                Patient History
               </CardTitle>
             </CardHeader>
-            <CardContent>
-              {upcomingAppointments.length === 0 ? (
-                <p className="text-muted-foreground">No upcoming appointments</p>
-              ) : (
-                <div className="space-y-3">
-                  {upcomingAppointments.map((appointment: any) => (
-                    <div key={appointment.id} className="flex items-center justify-between p-3 border rounded-lg">
-                      <div className="space-y-1">
-                        <div className="font-medium">
-                          {new Date(appointment.starts_at).toLocaleDateString()} at{' '}
-                          {new Date(appointment.starts_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            <CardContent className="space-y-2">
+              {historyLoading ? (
+                <p>Loading history...</p>
+              ) : patientHistory && patientHistory.length > 0 ? (
+                <ul className="list-disc pl-5">
+                  {patientHistory.map((event) => (
+                    <li key={event.id} className="mb-2">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <span className="font-medium">{event.action_type}:</span> {event.description}
                         </div>
                         <div className="text-sm text-muted-foreground">
-                          {appointment.services?.name} with {appointment.providers?.name}
+                          <Clock className="h-3 w-3 inline-block mr-1" />
+                          {new Date(event.created_at).toLocaleString()}
                         </div>
-                        {appointment.locations?.name && (
-                          <div className="text-sm text-muted-foreground">
-                            at {appointment.locations.name}
-                          </div>
-                        )}
                       </div>
-                      <Badge variant="secondary">
-                        {appointment.source === 'voice_ai' ? 'AI Booked' : 'Manual'}
-                      </Badge>
-                    </div>
+                    </li>
                   ))}
-                </div>
+                </ul>
+              ) : (
+                <p>No history available for this patient.</p>
               )}
             </CardContent>
           </Card>
+        </TabsContent>
 
+        <TabsContent value="security" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Past Appointments ({pastAppointments.length})</CardTitle>
+              <CardTitle className="flex items-center gap-2">
+                <Shield className="h-5 w-5" />
+                Security Details
+              </CardTitle>
             </CardHeader>
-            <CardContent>
-              {pastAppointments.length === 0 ? (
-                <p className="text-muted-foreground">No past appointments</p>
-              ) : (
-                <div className="space-y-3">
-                  {pastAppointments.slice(0, 10).map((appointment: any) => (
-                    <div key={appointment.id} className="flex items-center justify-between p-3 border rounded-lg">
-                      <div className="space-y-1">
-                        <div className="font-medium">
-                          {new Date(appointment.starts_at).toLocaleDateString()} at{' '}
-                          {new Date(appointment.starts_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </div>
-                        <div className="text-sm text-muted-foreground">
-                          {appointment.services?.name} with {appointment.providers?.name}
-                        </div>
-                      </div>
-                      <Badge variant="outline">
-                        {appointment.source === 'voice_ai' ? 'AI Booked' : 'Manual'}
-                      </Badge>
-                    </div>
-                  ))}
-                  {pastAppointments.length > 10 && (
-                    <p className="text-sm text-muted-foreground text-center">
-                      And {pastAppointments.length - 10} more appointments...
-                    </p>
-                  )}
-                </div>
-              )}
+            <CardContent className="space-y-2">
+              <div className="flex items-center gap-2">
+                <FileText className="h-4 w-4" />
+                Access Log: <Button variant="link" size="sm" onClick={() => auditAccess()}>View Access Log</Button>
+              </div>
             </CardContent>
           </Card>
-        </div>
-      </div>
+        </TabsContent>
+      </Tabs>
     </div>
   );
-}
+};
+
+export default PatientDetails;

@@ -1,207 +1,138 @@
 import React, { useState } from 'react';
-import { useAuth } from '@/hooks/useAuth';
-import { useSecurityAudit } from '@/hooks/useSecurityAudit';
+import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
+import { useSecurity } from '@/components/security/SecurityProvider';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
-import { Settings, UserCheck, AlertTriangle, Shield, Trash2, Clock, Lock } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { 
+  Users, 
+  Shield, 
+  Settings, 
+  AlertTriangle, 
+  UserCheck, 
+  Database,
+  Activity,
+  Lock,
+  Trash2,
+  Eye
+} from 'lucide-react';
 import { toast } from 'sonner';
-
-interface UserPermissions {
-  id: string;
-  email: string;
-  role: string;
-  admin_role?: string;
-  last_login?: string;
-  status: 'active' | 'suspended' | 'pending';
-}
 
 export const AdminControls: React.FC = () => {
   const { profile } = useAuth();
-  const { logAccess } = useSecurityAudit();
-  const [users, setUsers] = useState<UserPermissions[]>([]);
+  const { hasPermission } = useSecurity();
   const [selectedUser, setSelectedUser] = useState<string>('');
-  const [newRole, setNewRole] = useState<string>('');
-  const [loading, setLoading] = useState(false);
-  const [suspensionReason, setSuspensionReason] = useState('');
+  const [selectedRole, setSelectedRole] = useState<string>('');
 
-  const isAuthorized = profile?.role === 'owner' || profile?.admin_role === 'security_admin';
-
-  React.useEffect(() => {
-    if (isAuthorized) {
-      fetchUsers();
-    }
-  }, [isAuthorized]);
-
-  const fetchUsers = async () => {
-    if (!profile?.clinic_id) return;
-
-    try {
+  const { data: users, isLoading: usersLoading, refetch: refetchUsers } = useQuery({
+    queryKey: ['users'],
+    queryFn: async () => {
       const { data, error } = await supabase
         .from('profiles')
-        .select('user_id, display_name, role, admin_role, updated_at')
-        .eq('clinic_id', profile.clinic_id)
-        .neq('user_id', profile.user_id); // Don't include current user
+        .select('*');
 
-      if (error) throw error;
-      
-      setUsers(data?.map(user => ({
-        id: user.user_id,
-        email: user.display_name || 'Unknown',
-        role: user.role || 'staff',
-        admin_role: user.admin_role,
-        last_login: user.updated_at,
-        status: 'active'
-      })) || []);
-    } catch (error) {
-      console.error('Error fetching users:', error);
-      toast.error('Failed to fetch users');
-    }
-  };
+      if (error) {
+        console.error("Error fetching users:", error);
+        throw error;
+      }
+      return data;
+    },
+  });
 
-  const updateUserRole = async () => {
-    if (!selectedUser || !newRole) {
-      toast.error('Please select a user and role');
-      return;
-    }
+  const { data: roles, isLoading: rolesLoading } = useQuery({
+    queryKey: ['roles'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('roles')
+        .select('*');
 
-    setLoading(true);
+      if (error) {
+        console.error("Error fetching roles:", error);
+        throw error;
+      }
+      return data;
+    },
+  });
+
+  const handleRoleChange = async (userId: string, roleId: string) => {
     try {
-      const selectedUserData = users.find(u => u.id === selectedUser);
-      
-      // Log the permission change before making it
-      await logAccess({
-        action_type: 'role_update_attempt',
-        resource_type: 'user_permissions',
-        resource_id: selectedUser,
-        metadata: {
-          target_user_email: selectedUserData?.email,
-          old_role: selectedUserData?.role,
-          old_admin_role: selectedUserData?.admin_role,
-          new_role: newRole,
-          changed_by: profile?.email
-        }
-      });
-
       const { error } = await supabase
         .from('profiles')
-        .update({ 
-          role: newRole.includes('admin') ? 'admin' : newRole,
-          admin_role: newRole.includes('admin') ? 'technical_admin' as const : null,
-          updated_at: new Date().toISOString()
-        })
-        .eq('user_id', selectedUser)
-        .eq('clinic_id', profile?.clinic_id);
+        .update({ role_id: roleId })
+        .eq('user_id', userId);
 
-      if (error) throw error;
+      if (error) {
+        console.error("Error updating user role:", error);
+        toast.error("Failed to update user role.");
+        return;
+      }
 
-      // Log successful change
-      await logAccess({
-        action_type: 'role_updated',
-        resource_type: 'user_permissions',
-        resource_id: selectedUser,
-        metadata: {
-          target_user_email: selectedUserData?.email,
-          new_role: newRole,
-          changed_by: profile?.email,
-          timestamp: new Date().toISOString()
-        }
-      });
-
-      await fetchUsers();
-      setSelectedUser('');
-      setNewRole('');
-      toast.success('User role updated successfully');
-    } catch (error) {
-      console.error('Error updating user role:', error);
-      toast.error('Failed to update user role');
-    } finally {
-      setLoading(false);
+      toast.success("User role updated successfully!");
+      refetchUsers(); // Refresh the user list
+    } catch (err) {
+      console.error("Unexpected error updating user role:", err);
+      toast.error("Unexpected error occurred.");
     }
   };
 
-  const suspendUser = async () => {
-    if (!selectedUser || !suspensionReason) {
-      toast.error('Please select a user and provide a suspension reason');
-      return;
-    }
-
-    setLoading(true);
+  const handleResetPassword = async (userId: string) => {
     try {
-      const selectedUserData = users.find(u => u.id === selectedUser);
-
-      // Log suspension action
-      await logAccess({
-        action_type: 'user_suspended',
-        resource_type: 'user_permissions',
-        resource_id: selectedUser,
-        metadata: {
-          target_user_email: selectedUserData?.email,
-          suspension_reason: suspensionReason,
-          suspended_by: profile?.email,
-          timestamp: new Date().toISOString()
-        }
+      // Call the Supabase function to reset the user's password
+      const { data, error } = await supabase.functions.invoke('reset-user-password', {
+        body: { user_id: userId },
       });
 
-      const { error } = await supabase
-        .from('profiles')
-        .update({ 
-          role: 'suspended',
-          updated_at: new Date().toISOString()
-        })
-        .eq('user_id', selectedUser)
-        .eq('clinic_id', profile?.clinic_id);
+      if (error) {
+        console.error('Error invoking reset password function:', error);
+        toast.error('Failed to reset password. Please check the console for details.');
+        return;
+      }
 
-      if (error) throw error;
-
-      await fetchUsers();
-      setSelectedUser('');
-      setSuspensionReason('');
-      toast.success('User suspended successfully');
-    } catch (error) {
-      console.error('Error suspending user:', error);
-      toast.error('Failed to suspend user');
-    } finally {
-      setLoading(false);
+      toast.success('Password reset email sent successfully!');
+    } catch (err) {
+      console.error('Unexpected error resetting password:', err);
+      toast.error('Unexpected error occurred. Please check the console for details.');
     }
   };
 
-  const cleanupOldData = async () => {
-    setLoading(true);
+  const handleDeleteUser = async (userId: string) => {
     try {
-      // Log cleanup action
-      await logAccess({
-        action_type: 'data_cleanup_triggered',
-        resource_type: 'system',
-        metadata: {
-          triggered_by: profile?.email,
-          timestamp: new Date().toISOString()
-        }
+      const confirmDelete = window.confirm("Are you sure you want to delete this user? This action cannot be undone.");
+      if (!confirmDelete) {
+        return;
+      }
+
+      // Call the Supabase function to delete the user
+      const { data, error } = await supabase.functions.invoke('delete-user', {
+        body: { user_id: userId },
       });
 
-      const { error } = await supabase.functions.invoke('security-cleanup');
-      
-      if (error) throw error;
-      toast.success('Data cleanup completed successfully');
-    } catch (error) {
-      console.error('Error running cleanup:', error);
-      toast.error('Failed to run data cleanup');
-    } finally {
-      setLoading(false);
+      if (error) {
+        console.error('Error invoking delete user function:', error);
+        toast.error('Failed to delete user. Please check the console for details.');
+        return;
+      }
+
+      toast.success('User deleted successfully!');
+      refetchUsers(); // Refresh the user list
+    } catch (err) {
+      console.error('Unexpected error deleting user:', err);
+      toast.error('Unexpected error occurred. Please check the console for details.');
     }
   };
 
-  if (!isAuthorized) {
+  if (!hasPermission('manage_users')) {
     return (
-      <Alert variant="destructive">
-        <AlertTriangle className="h-4 w-4" />
+      <Alert>
+        <Shield className="h-4 w-4" />
         <AlertDescription>
-          You do not have permission to access administrative controls.
+          You don't have permission to access admin controls.
         </AlertDescription>
       </Alert>
     );
@@ -209,156 +140,67 @@ export const AdminControls: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold flex items-center gap-2">
-            <Settings className="h-6 w-6" />
-            Administrative Controls
-          </h2>
-          <p className="text-muted-foreground">Manage user permissions and system security</p>
-        </div>
-        <Badge variant="secondary">
-          <Shield className="h-3 w-3 mr-1" />
-          Security Admin Access
-        </Badge>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* User Management */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <UserCheck className="h-5 w-5" />
-              User Role Management
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <Label htmlFor="user-select">Select User</Label>
-              <Select value={selectedUser} onValueChange={setSelectedUser}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Choose a user to manage" />
-                </SelectTrigger>
-                <SelectContent>
-                  {users.map(user => (
-                    <SelectItem key={user.id} value={user.id}>
-                      {user.email} - {user.role}
-                      {user.status === 'suspended' && ' (Suspended)'}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <Label htmlFor="role-select">New Role</Label>
-              <Select value={newRole} onValueChange={setNewRole}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select new role" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="staff">Staff</SelectItem>
-                  <SelectItem value="receptionist">Receptionist</SelectItem>
-                  <SelectItem value="manager">Manager</SelectItem>
-                  <SelectItem value="technical_admin">Technical Admin</SelectItem>
-                  <SelectItem value="security_admin">Security Admin</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <Button 
-              onClick={updateUserRole} 
-              disabled={loading || !selectedUser || !newRole}
-              className="w-full"
-            >
-              Update Role
-            </Button>
-          </CardContent>
-        </Card>
-
-        {/* User Suspension */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5" />
-              User Suspension
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <Label htmlFor="suspension-reason">Suspension Reason</Label>
-              <Input
-                id="suspension-reason"
-                value={suspensionReason}
-                onChange={(e) => setSuspensionReason(e.target.value)}
-                placeholder="Enter reason for suspension"
-              />
-            </div>
-
-            <Button 
-              onClick={suspendUser}
-              disabled={loading || !selectedUser || !suspensionReason}
-              variant="destructive"
-              className="w-full"
-            >
-              <Lock className="h-4 w-4 mr-2" />
-              Suspend User
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* System Maintenance */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Trash2 className="h-5 w-5" />
-            System Maintenance
+            <Users className="h-5 w-5" />
+            User Management
           </CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="font-medium">Data Cleanup</h3>
-              <p className="text-sm text-muted-foreground">
-                Remove old audit logs and enforce data retention policies
-              </p>
-            </div>
-            <Button onClick={cleanupOldData} disabled={loading} variant="outline">
-              <Clock className="h-4 w-4 mr-2" />
-              Run Cleanup
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Current Users Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Current Users</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-2">
-            {users.map(user => (
-              <div key={user.id} className="flex items-center justify-between p-3 border rounded-lg">
-                <div>
-                  <div className="font-medium">{user.email}</div>
-                  <div className="text-sm text-muted-foreground">
-                    Role: {user.role}
-                    {user.admin_role && ` (${user.admin_role})`}
-                  </div>
-                  {user.last_login && (
+        <CardContent className="space-y-4">
+          {usersLoading ? (
+            <div>Loading users...</div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {users?.map((user) => (
+                <Card key={user.user_id} className="shadow-sm">
+                  <CardHeader>
+                    <CardTitle className="text-sm font-medium">{user.full_name || user.email}</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
                     <div className="text-xs text-muted-foreground">
-                      Last login: {new Date(user.last_login).toLocaleDateString()}
+                      <p>Email: {user.email}</p>
+                      <p>User ID: {user.user_id}</p>
                     </div>
-                  )}
-                </div>
-                <Badge variant={user.status === 'active' ? 'default' : 'destructive'}>
-                  {user.status}
-                </Badge>
-              </div>
-            ))}
-          </div>
+                    <Select onValueChange={(roleId) => handleRoleChange(user.user_id, roleId)}>
+                      <SelectTrigger className="w-full text-sm">
+                        <SelectValue placeholder="Select Role" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {rolesLoading ? (
+                          <SelectItem value="">Loading roles...</SelectItem>
+                        ) : (
+                          roles?.map((role) => (
+                            <SelectItem key={role.id} value={role.id.toString()}>
+                              {role.name}
+                            </SelectItem>
+                          ))
+                        )}
+                      </SelectContent>
+                    </Select>
+                    <div className="flex justify-between items-center mt-2">
+                      <Button 
+                        variant="outline" 
+                        size="xs" 
+                        onClick={() => handleResetPassword(user.user_id)}
+                      >
+                        <Lock className="h-3 w-3 mr-1" />
+                        Reset Password
+                      </Button>
+                      <Button 
+                        variant="destructive" 
+                        size="xs" 
+                        onClick={() => handleDeleteUser(user.user_id)}
+                      >
+                        <Trash2 className="h-3 w-3 mr-1" />
+                        Delete User
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

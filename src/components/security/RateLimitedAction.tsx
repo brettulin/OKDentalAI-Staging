@@ -1,3 +1,4 @@
+
 import React, { useState, useCallback, createContext, useContext } from 'react';
 import { useSecurityAudit } from '@/hooks/useSecurityAudit';
 import { useAuth } from '@/hooks/useAuth';
@@ -179,15 +180,19 @@ export const useRateLimit = () => {
   return context;
 };
 
-// HOC for wrapping components with rate limiting
+// Simplified HOC that doesn't use forwardRef to avoid TypeScript issues
 export const withRateLimit = <P extends object>(
   Component: React.ComponentType<P>,
   actionKey: string,
   config?: Partial<RateLimitConfig>
 ) => {
-  return React.forwardRef<any, P>((props, ref) => (
+  const WrappedComponent = (props: P) => (
     <RateLimitProvider>
-      <Component {...props} ref={ref} />
+      <Component {...props} />
     </RateLimitProvider>
-  ));
+  );
+  
+  WrappedComponent.displayName = `withRateLimit(${Component.displayName || Component.name})`;
+  
+  return WrappedComponent;
 };
