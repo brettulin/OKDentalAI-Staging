@@ -14,6 +14,7 @@ import PMS from '@/pages/PMS';
 import Settings from '@/pages/Settings';
 import AISettings from '@/pages/settings/AISettings';
 import QA from '@/pages/QA';
+import Production from '@/pages/Production';
 import NotFound from '@/pages/NotFound';
 import { Layout } from '@/components/Layout';
 import { AuthProvider, useAuth } from '@/hooks/useAuth';
@@ -178,6 +179,14 @@ function App() {
                 element={
                   <ProtectedRoute>
                     <Layout><QA /></Layout>
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/production" 
+                element={
+                  <ProtectedRoute>
+                    <Layout><Production /></Layout>
                   </ProtectedRoute>
                 } 
               />
