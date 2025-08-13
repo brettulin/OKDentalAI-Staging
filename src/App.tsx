@@ -27,6 +27,7 @@ import { SessionTimeout } from '@/components/security/SessionTimeout';
 import { RateLimitProvider } from '@/components/security/RateLimitedAction';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { PageSkeleton } from '@/components/PageSkeleton';
+import { PlatformRoute } from '@/components/security/PlatformRoute';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -198,7 +199,9 @@ function App() {
                  path="/production" 
                  element={
                    <ProtectedRoute>
-                     <Layout><Production /></Layout>
+                     <PlatformRoute>
+                       <Layout><Production /></Layout>
+                     </PlatformRoute>
                    </ProtectedRoute>
                  } 
                />
@@ -206,7 +209,9 @@ function App() {
                  path="/enterprise" 
                  element={
                    <ProtectedRoute>
-                     <Layout><Enterprise /></Layout>
+                     <PlatformRoute>
+                       <Layout><Enterprise /></Layout>
+                     </PlatformRoute>
                    </ProtectedRoute>
                  } 
                />
@@ -214,7 +219,9 @@ function App() {
                  path="/optimization" 
                  element={
                    <ProtectedRoute>
-                     <Layout><Optimization /></Layout>
+                     <PlatformRoute>
+                       <Layout><Optimization /></Layout>
+                     </PlatformRoute>
                    </ProtectedRoute>
                  } 
                />
@@ -222,7 +229,9 @@ function App() {
                  path="/global" 
                  element={
                    <ProtectedRoute>
-                     <Layout><Global /></Layout>
+                     <PlatformRoute>
+                       <Layout><Global /></Layout>
+                     </PlatformRoute>
                    </ProtectedRoute>
                  } 
                />
