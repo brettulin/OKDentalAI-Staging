@@ -1,4 +1,4 @@
-import { PMSInterface, PMSAdapterConfig, Patient, Appointment, Location, Operatory, PatientSearchQuery, PatientCreateData, PatientUpdateData, AppointmentCreateData, AppointmentUpdateData, DateRange } from '../../../_shared/pms-interface.ts';
+import { PMSInterface, PMSAdapterConfig, Patient, Appointment, Location, Operatory, PatientSearchQuery, PatientCreateData, PatientUpdateData, AppointmentCreateData, AppointmentUpdateData, DateRange } from '../../_shared/pms-interface.ts';
 
 /**
  * Dentrix PMS Adapter Implementation
