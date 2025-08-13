@@ -850,6 +850,10 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: string
       }
+      get_user_assigned_patient_ids: {
+        Args: Record<PropertyKey, never>
+        Returns: string[]
+      }
       has_admin_permission: {
         Args: { permission_type: string }
         Returns: boolean
@@ -883,6 +887,10 @@ export type Database = {
       update_user_role: {
         Args: { target_user_id: string; new_role: string }
         Returns: undefined
+      }
+      user_can_access_patient: {
+        Args: { patient_id: string }
+        Returns: boolean
       }
       validate_production_readiness: {
         Args: { p_clinic_id: string }

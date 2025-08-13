@@ -57,7 +57,14 @@ export const useSecurePatientData = () => {
 
       const { data, error } = await query;
 
-      if (error) throw error;
+      if (error) {
+        // If error is related to RLS, log it but don't expose details
+        console.error('Patient access error:', error.message);
+        if (error.message.includes('policy')) {
+          throw new Error('Insufficient permissions to access patient data');
+        }
+        throw error;
+      }
 
       // Log access to patient list
       await logAccess({
@@ -65,16 +72,17 @@ export const useSecurePatientData = () => {
         resource_type: 'patient',
         metadata: {
           search_term: searchTerm,
-          result_count: data?.length || 0
+          result_count: data?.length || 0,
+          access_level: 'list_view'
         }
       });
 
-      // Process and mask sensitive data
+      // Process and mask sensitive data for list view
       const securePatients: SecurePatientData[] = data?.map(patient => ({
         id: patient.id,
         full_name: patient.full_name,
         clinic_id: patient.clinic_id,
-        notes: patient.notes,
+        notes: patient.notes ? maskSensitiveData(patient.notes, 50) : undefined,
         phone_masked: patient.phone ? maskSensitiveData(patient.phone, 4) : undefined,
         email_masked: patient.email ? maskSensitiveData(patient.email, 3) : undefined,
         dob_masked: patient.dob ? maskSensitiveData(patient.dob, 0) : undefined,
@@ -96,6 +104,15 @@ export const useSecurePatientData = () => {
     if (!profile?.clinic_id) return null;
 
     try {
+      // First check if user can access this patient using our security function
+      const { data: canAccess, error: accessError } = await supabase.rpc('user_can_access_patient', {
+        patient_id: patientId
+      });
+
+      if (accessError || !canAccess) {
+        throw new Error('Access denied: Insufficient permissions to view this patient');
+      }
+
       // Log access to specific patient
       await logPatientAccess(patientId, 'view_patient_details');
 
@@ -103,10 +120,14 @@ export const useSecurePatientData = () => {
         .from('patients')
         .select('*')
         .eq('id', patientId)
-        .eq('clinic_id', profile.clinic_id)
         .single();
 
-      if (error) throw error;
+      if (error) {
+        if (error.code === 'PGRST116') {
+          throw new Error('Patient not found or access denied');
+        }
+        throw error;
+      }
 
       return data;
     } catch (error) {
