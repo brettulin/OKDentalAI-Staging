@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useSecurityAudit } from '@/hooks/useSecurityAudit';
+import { useEnhancedPatientSecurity } from '@/hooks/useEnhancedPatientSecurity';
 import { supabase } from '@/integrations/supabase/client';
 import { encryptPatientField, decryptPatientField, maskSensitiveData } from '@/utils/encryption';
 
@@ -26,6 +27,7 @@ interface SecurePatientData extends Omit<Patient, 'phone' | 'email' | 'dob'> {
 export const useSecurePatientData = () => {
   const { profile } = useAuth();
   const { logAccess } = useSecurityAudit();
+  const { validatePatientAccess, logPatientAccess: enhancedLogPatientAccess } = useEnhancedPatientSecurity();
   const [patients, setPatients] = useState<SecurePatientData[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -104,17 +106,18 @@ export const useSecurePatientData = () => {
     if (!profile?.clinic_id) return null;
 
     try {
-      // First check if user can access this patient using our security function
-      const { data: canAccess, error: accessError } = await supabase.rpc('user_can_access_patient', {
-        patient_id: patientId
-      });
-
-      if (accessError || !canAccess) {
-        throw new Error('Access denied: Insufficient permissions to view this patient');
+      // Enhanced patient access validation
+      const hasAccess = await validatePatientAccess(patientId, 'view_details');
+      if (!hasAccess) {
+        throw new Error('Access denied: You do not have permission to view this patient');
       }
 
-      // Log access to specific patient
-      await logPatientAccess(patientId, 'view_patient_details');
+      // Log the detailed access using enhanced logging
+      await enhancedLogPatientAccess({
+        patientId,
+        accessType: 'view',
+        metadata: { operation: 'view_details' }
+      });
 
       const { data, error } = await supabase
         .from('patients')

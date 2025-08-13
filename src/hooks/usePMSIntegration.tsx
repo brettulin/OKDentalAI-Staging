@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { encryptData, decryptData } from '@/utils/encryption';
+import { useCredentialSecurity } from '@/hooks/useCredentialSecurity';
 import type { Database } from '@/integrations/supabase/types';
 
 type OfficeRow = Database['public']['Tables']['offices']['Row'];
@@ -15,6 +16,7 @@ interface PMSCredentials {
 
 export function usePMSIntegration() {
   const queryClient = useQueryClient();
+  const { requestCredentialAccess, validateCredentialAccess, monitorCredentialAccess } = useCredentialSecurity();
 
   // Get offices for current clinic
   const { data: offices, isLoading: officesLoading, refetch: refetchOffices } = useQuery({
@@ -157,6 +159,26 @@ export function usePMSIntegration() {
       officeId: string; 
       [key: string]: any 
     }) => {
+      // Enhanced credential access control
+      if (officeId) {
+        // Check if user has active credential access
+        if (!validateCredentialAccess(officeId)) {
+          // Request credential access for this operation
+          const accessGranted = await requestCredentialAccess({
+            officeId,
+            purpose: `PMS operation: ${action}`,
+            metadata: { action, timestamp: new Date().toISOString() }
+          });
+
+          if (!accessGranted) {
+            throw new Error('Credential access denied for PMS operation');
+          }
+        }
+
+        // Monitor credential access patterns
+        await monitorCredentialAccess(officeId);
+      }
+
       // For PMS operations that need credentials, decrypt them securely
       let enhancedParams = params;
       if (officeId) {
