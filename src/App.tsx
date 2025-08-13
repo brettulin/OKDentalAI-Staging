@@ -16,6 +16,7 @@ import AISettings from '@/pages/settings/AISettings';
 import QA from '@/pages/QA';
 import Production from '@/pages/Production';
 import NotFound from '@/pages/NotFound';
+import Analytics from '@/pages/Analytics';
 import { Layout } from '@/components/Layout';
 import { AuthProvider, useAuth } from '@/hooks/useAuth';
 import { SecurityProvider } from '@/components/security/SecurityProvider';
@@ -173,7 +174,15 @@ function App() {
                     <Layout><PMS /></Layout>
                   </ProtectedRoute>
                 } 
-              />
+               />
+              <Route 
+                path="/analytics" 
+                element={
+                  <ProtectedRoute>
+                    <Layout><Analytics /></Layout>
+                  </ProtectedRoute>
+                } 
+               />
               <Route 
                 path="/qa" 
                 element={
