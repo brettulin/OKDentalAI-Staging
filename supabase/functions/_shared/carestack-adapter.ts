@@ -12,11 +12,13 @@ import {
 
 import {
   CareStackCredentials,
-  CareStackPatient,
-  CareStackLocation,
-  CareStackOperatory,
+  PatientViewModel,
+  LocationDetailModel,
+  OperatoryDetail,
   CareStackProvider,
-  CareStackAppointment,
+  AppointmentDetailModel,
+  SearchRequest,
+  PatientSearchResponseModel,
   CareStackSearchPatientsRequest,
   CareStackSearchPatientsResponse,
   CareStackCreatePatientRequest,
@@ -25,7 +27,14 @@ import {
   CareStackListOperatoriesResponse,
   CareStackCache,
   CareStackCacheItem,
-  CareStackErrorResponse
+  CareStackErrorResponse,
+  AppointmentStatusExternalModel,
+  ProcedureCodeBasicApiResponseModel,
+  // Backward compatibility aliases
+  CareStackPatient,
+  CareStackLocation,
+  CareStackOperatory,
+  CareStackAppointment
 } from './carestack-types.ts'
 
 import {
@@ -48,8 +57,9 @@ export class CareStackAdapter implements PMSInterface {
 
   constructor(credentials: CareStackCredentials) {
     this.credentials = credentials
-    this.baseUrl = credentials.baseUrl || Deno.env.get('CARESTACK_BASE_URL') || 'https://api.carestack.com/v1'
-    this.useMockMode = credentials.useMockMode ?? (Deno.env.get('CARESTACK_USE_MOCK') === 'true')
+    // Updated to match actual API structure: /api/v1.0/
+    this.baseUrl = credentials.baseUrl || Deno.env.get('CARESTACK_BASE_URL') || 'https://api.carestack.com'
+    this.useMockMode = credentials.useMockMode ?? (Deno.env.get('CARESTACK_USE_MOCK') !== 'false')
     this.cache = {
       locations: new Map(),
       operatories: new Map(),
@@ -140,14 +150,14 @@ export class CareStackAdapter implements PMSInterface {
   }
 
   // Convert CareStack types to our internal types
-  private convertPatient(csPatient: CareStackPatient): Patient {
+  private convertPatient(csPatient: PatientViewModel): Patient {
     return {
-      id: csPatient.id,
+      id: csPatient.id.toString(),
       firstName: csPatient.firstName,
       lastName: csPatient.lastName,
-      phone: csPatient.phone || '',
+      phone: csPatient.mobileNumber || csPatient.homeNumber || csPatient.workNumber || '',
       email: csPatient.email,
-      dateOfBirth: csPatient.dob,
+      dateOfBirth: csPatient.dateOfBirth,
       address: csPatient.address ? {
         street: csPatient.address.street,
         city: csPatient.address.city,
@@ -157,9 +167,9 @@ export class CareStackAdapter implements PMSInterface {
     }
   }
 
-  private convertLocation(csLocation: CareStackLocation): Location {
+  private convertLocation(csLocation: LocationDetailModel): Location {
     return {
-      id: csLocation.id,
+      id: csLocation.id.toString(),
       name: csLocation.name,
       address: {
         street: csLocation.address.street,
@@ -193,10 +203,21 @@ export class CareStackAdapter implements PMSInterface {
     }
 
     try {
-      const params = new URLSearchParams({ phone: phoneNumber })
-      const response = await this.makeRequest<CareStackSearchPatientsResponse>(`/patients/search?${params}`)
+      // Updated to use POST with SearchRequest body per API documentation
+      const searchRequest: SearchRequest = {
+        searchCriteria: {
+          phone: phoneNumber
+        },
+        pageNumber: 1,
+        pageSize: 20
+      }
       
-      return response.items.map(patient => this.convertPatient(patient))
+      const response = await this.makeRequest<PatientSearchResponseModel>('/api/v1.0/patients/search', {
+        method: 'POST',
+        body: JSON.stringify(searchRequest)
+      })
+      
+      return response.patients.map(patient => this.convertPatient(patient))
     } catch (error) {
       console.error('Error searching patient by phone:', error)
       throw error
@@ -207,22 +228,22 @@ export class CareStackAdapter implements PMSInterface {
     if (this.useMockMode) {
       await addArtificialLatency()
       
-      const newPatient: CareStackPatient = {
-        id: generateMockId('cs_pat'),
+      const newPatient: PatientViewModel = {
+        id: parseInt(generateMockId('cs_pat').replace('cs_pat_', '')),
         firstName: patientData.firstName,
         lastName: patientData.lastName,
-        phone: patientData.phone,
-        email: patientData.email || null,
-        dob: patientData.dateOfBirth || null,
-        insuranceCarrier: null,
-        memberId: null,
-        notes: null,
+        mobileNumber: patientData.phone,
+        email: patientData.email || undefined,
+        dateOfBirth: patientData.dateOfBirth || undefined,
+        insuranceCarrier: undefined,
+        memberId: undefined,
+        notes: undefined,
         address: patientData.address,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       }
       
-      mockStorage.patients.set(newPatient.id, newPatient)
+      mockStorage.patients.set(newPatient.id.toString(), newPatient as any)
       return this.convertPatient(newPatient)
     }
 
@@ -230,13 +251,13 @@ export class CareStackAdapter implements PMSInterface {
       const payload: CareStackCreatePatientRequest = {
         firstName: patientData.firstName,
         lastName: patientData.lastName,
-        phone: patientData.phone,
+        mobileNumber: patientData.phone,
         email: patientData.email,
-        dob: patientData.dateOfBirth,
+        dateOfBirth: patientData.dateOfBirth,
         address: patientData.address
       }
 
-      const response = await this.makeRequest<CareStackPatient>('/patients', {
+      const response = await this.makeRequest<PatientViewModel>('/api/v1.0/patients', {
         method: 'POST',
         body: JSON.stringify(payload)
       })
@@ -344,27 +365,26 @@ export class CareStackAdapter implements PMSInterface {
 
     try {
       const payload: CareStackCreateAppointmentRequest = {
-        patientId: appointmentData.patientId,
-        providerId: appointmentData.providerId,
-        locationId: appointmentData.locationId,
-        start: appointmentData.startTime,
-        end: appointmentData.endTime,
-        notes: appointmentData.notes,
-        idempotencyKey: `appt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+        patientId: parseInt(appointmentData.patientId),
+        providerId: parseInt(appointmentData.providerId),
+        locationId: parseInt(appointmentData.locationId),
+        startTime: appointmentData.startTime,
+        endTime: appointmentData.endTime,
+        notes: appointmentData.notes
       }
 
-      const response = await this.makeRequest<CareStackAppointment>('/appointments', {
+      const response = await this.makeRequest<AppointmentDetailModel>('/api/v1.0/appointments', {
         method: 'POST',
         body: JSON.stringify(payload)
       })
 
       return {
-        id: response.id,
-        patientId: response.patientId,
-        providerId: response.providerId,
-        locationId: response.locationId,
-        startTime: response.start,
-        endTime: response.end,
+        id: response.id.toString(),
+        patientId: response.patientId.toString(),
+        providerId: response.providerId.toString(),
+        locationId: response.locationId.toString(),
+        startTime: response.startTime,
+        endTime: response.endTime,
         status: response.status,
         notes: response.notes
       }
@@ -387,8 +407,10 @@ export class CareStackAdapter implements PMSInterface {
     }
 
     try {
-      const response = await this.makeRequest<{ providers: CareStackProvider[] }>('/providers')
-      const providers = response.providers.map(provider => this.convertProvider(provider))
+      // Note: No providers endpoint visible in API docs, may need clarification from CareStack
+      // Using a fallback approach for now
+      const response = await this.makeRequest<CareStackProvider[]>('/api/v1.0/staff')
+      const providers = response.map(provider => this.convertProvider(provider))
       this.setCachedData(this.cache.providers, cacheKey, providers)
       return providers
     } catch (error) {
@@ -410,8 +432,9 @@ export class CareStackAdapter implements PMSInterface {
     }
 
     try {
-      const response = await this.makeRequest<CareStackListLocationsResponse>('/locations')
-      const locations = response.locations.map(location => this.convertLocation(location))
+      // Updated endpoint per API documentation
+      const response = await this.makeRequest<LocationDetailModel[]>('/api/v1.0/locations')
+      const locations = response.map(location => this.convertLocation(location))
       this.setCachedData(this.cache.locations, cacheKey, locations)
       return locations
     } catch (error) {
@@ -421,7 +444,7 @@ export class CareStackAdapter implements PMSInterface {
   }
 
   // CareStack-specific methods
-  async listOperatories(locationId?: string): Promise<CareStackOperatory[]> {
+  async listOperatories(locationId?: string): Promise<OperatoryDetail[]> {
     const cacheKey = locationId || 'all'
     const cached = this.getCachedData(this.cache.operatories, cacheKey)
     if (cached) return cached
@@ -436,10 +459,13 @@ export class CareStackAdapter implements PMSInterface {
     }
 
     try {
-      const endpoint = locationId ? `/operatories?locationId=${locationId}` : '/operatories'
-      const response = await this.makeRequest<CareStackListOperatoriesResponse>(endpoint)
-      this.setCachedData(this.cache.operatories, cacheKey, response.operatories)
-      return response.operatories
+      // Updated endpoint per API documentation
+      const response = await this.makeRequest<OperatoryDetail[]>('/api/v1.0/operatories')
+      const filtered = locationId 
+        ? response.filter(op => op.locationId.toString() === locationId)
+        : response
+      this.setCachedData(this.cache.operatories, cacheKey, filtered)
+      return filtered
     } catch (error) {
       console.error('Error listing operatories:', error)
       throw error
@@ -495,34 +521,167 @@ export class CareStackAdapter implements PMSInterface {
     }
 
     try {
-      const params = new URLSearchParams()
-      if (request.q) params.append('q', request.q)
-      if (request.phone) params.append('phone', request.phone)
-      if (request.email) params.append('email', request.email)
-      if (request.dob) params.append('dob', request.dob)
-      if (request.page) params.append('page', request.page.toString())
-      if (request.pageSize) params.append('pageSize', request.pageSize.toString())
-      
-      return await this.makeRequest<CareStackSearchPatientsResponse>(`/patients/search?${params}`)
+      // Convert to new SearchRequest format
+      const searchRequest: SearchRequest = {
+        searchCriteria: {
+          firstName: request.q,
+          lastName: request.q,
+          phone: request.phone,
+          email: request.email,
+          dateOfBirth: request.dob
+        },
+        pageNumber: request.page || 1,
+        pageSize: request.pageSize || 20
+      }
+
+      const response = await this.makeRequest<PatientSearchResponseModel>('/api/v1.0/patients/search', {
+        method: 'POST',
+        body: JSON.stringify(searchRequest)
+      })
+
+      // Convert to backward compatible format
+      return {
+        items: response.patients,
+        total: response.totalCount,
+        page: response.pageNumber,
+        pageSize: response.pageSize,
+        totalPages: response.totalPages
+      }
     } catch (error) {
       console.error('Error searching patients:', error)
       throw error
     }
   }
 
-  async getPatient(patientId: string): Promise<CareStackPatient | null> {
+  async getPatient(patientId: string): Promise<PatientViewModel | null> {
     if (this.useMockMode) {
       await addArtificialLatency()
       return mockStorage.patients.get(patientId) || null
     }
 
     try {
-      return await this.makeRequest<CareStackPatient>(`/patients/${patientId}`)
+      return await this.makeRequest<PatientViewModel>(`/api/v1.0/patients/${patientId}`)
     } catch (error) {
       if (error.message.includes('404')) {
         return null
       }
       console.error('Error getting patient:', error)
+      throw error
+    }
+  }
+
+  // New CareStack API methods per documentation
+  async getAppointmentStatuses(): Promise<AppointmentStatusExternalModel[]> {
+    if (this.useMockMode) {
+      await addArtificialLatency()
+      return [
+        { id: 1, name: 'Scheduled', isActive: true },
+        { id: 2, name: 'Confirmed', isActive: true },
+        { id: 3, name: 'Arrived', isActive: true },
+        { id: 4, name: 'In Progress', isActive: true },
+        { id: 5, name: 'Completed', isActive: true },
+        { id: 6, name: 'Cancelled', isActive: true },
+        { id: 7, name: 'No Show', isActive: true }
+      ]
+    }
+
+    try {
+      return await this.makeRequest<AppointmentStatusExternalModel[]>('/api/v1.0/appointment-status')
+    } catch (error) {
+      console.error('Error getting appointment statuses:', error)
+      throw error
+    }
+  }
+
+  async getAppointment(appointmentId: number): Promise<AppointmentDetailModel | null> {
+    if (this.useMockMode) {
+      await addArtificialLatency()
+      const appointment = Array.from(mockStorage.appointments.values()).find(
+        apt => apt.id === appointmentId.toString()
+      )
+      if (!appointment) return null
+      
+      return {
+        id: parseInt(appointment.id),
+        patientId: parseInt(appointment.patientId),
+        providerId: parseInt(appointment.providerId),
+        locationId: parseInt(appointment.locationId),
+        startTime: appointment.start,
+        endTime: appointment.end,
+        status: appointment.status,
+        notes: appointment.notes
+      }
+    }
+
+    try {
+      return await this.makeRequest<AppointmentDetailModel>(`/api/v1.0/appointments/${appointmentId}`)
+    } catch (error) {
+      if (error.message.includes('404')) {
+        return null
+      }
+      console.error('Error getting appointment:', error)
+      throw error
+    }
+  }
+
+  async deleteAppointment(appointmentId: number): Promise<boolean> {
+    if (this.useMockMode) {
+      await addArtificialLatency()
+      return mockStorage.appointments.delete(appointmentId.toString())
+    }
+
+    try {
+      await this.makeRequest(`/api/v1.0/appointments/${appointmentId}`, { method: 'DELETE' })
+      return true
+    } catch (error) {
+      console.error('Error deleting appointment:', error)
+      return false
+    }
+  }
+
+  async cancelAppointment(appointmentId: number, reason?: string): Promise<boolean> {
+    if (this.useMockMode) {
+      await addArtificialLatency()
+      const appointment = mockStorage.appointments.get(appointmentId.toString())
+      if (appointment) {
+        appointment.status = 'cancelled'
+        return true
+      }
+      return false
+    }
+
+    try {
+      await this.makeRequest(`/api/v1.0/appointments/${appointmentId}/cancel`, {
+        method: 'PUT',
+        body: JSON.stringify({ reason: reason || 'Cancelled by system' })
+      })
+      return true
+    } catch (error) {
+      console.error('Error cancelling appointment:', error)
+      return false
+    }
+  }
+
+  async getProcedureCodes(code?: string, offset = 0, limit = 20): Promise<ProcedureCodeBasicApiResponseModel[]> {
+    if (this.useMockMode) {
+      await addArtificialLatency()
+      return [
+        { id: 1, code: 'D0150', description: 'Comprehensive oral evaluation', category: 'Diagnostic', fee: 150 },
+        { id: 2, code: 'D1110', description: 'Adult prophylaxis', category: 'Preventive', fee: 100 },
+        { id: 3, code: 'D2140', description: 'Amalgam - one surface', category: 'Restorative', fee: 180 }
+      ].filter(proc => !code || proc.code.includes(code))
+    }
+
+    try {
+      const params = new URLSearchParams({
+        offset: offset.toString(),
+        limit: limit.toString()
+      })
+      if (code) params.append('code', code)
+      
+      return await this.makeRequest<ProcedureCodeBasicApiResponseModel[]>(`/api/v1.0/procedure-codes?${params}`)
+    } catch (error) {
+      console.error('Error getting procedure codes:', error)
       throw error
     }
   }

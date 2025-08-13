@@ -8,23 +8,29 @@ export interface CareStackCredentials {
   useMockMode?: boolean
 }
 
-export interface CareStackPatient {
-  id: string
+// CareStack API Models (matching actual API structure)
+export interface PatientViewModel {
+  id: number
   firstName: string
   lastName: string
-  dob: string | null
-  phone: string | null
-  email: string | null
-  insuranceCarrier: string | null
-  memberId: string | null
-  notes: string | null
+  dateOfBirth?: string
+  mobileNumber?: string
+  homeNumber?: string
+  workNumber?: string
+  email?: string
   address?: CareStackAddress
   gender?: string
   ssn?: string
   emergencyContact?: CareStackEmergencyContact
-  createdAt: string
-  updatedAt: string
+  createdAt?: string
+  updatedAt?: string
+  insuranceCarrier?: string
+  memberId?: string
+  notes?: string
 }
+
+// Keep backward compatibility alias
+export interface CareStackPatient extends PatientViewModel {}
 
 export interface CareStackAddress {
   street: string
@@ -40,23 +46,30 @@ export interface CareStackEmergencyContact {
   relationship: string
 }
 
-export interface CareStackLocation {
-  id: string
+export interface LocationDetailModel {
+  id: number
   name: string
   address: CareStackAddress
-  phone: string | null
-  timezone: string
+  phone?: string
+  timezone?: string
   isActive: boolean
-  operatories: CareStackOperatory[]
 }
 
-export interface CareStackOperatory {
-  id: string
+// Keep backward compatibility alias
+export interface CareStackLocation extends LocationDetailModel {
+  operatories?: CareStackOperatory[]
+}
+
+export interface OperatoryDetail {
+  id: number
   name: string
-  locationId: string
+  locationId: number
   isActive: boolean
   equipmentList?: string[]
 }
+
+// Keep backward compatibility alias  
+export interface CareStackOperatory extends OperatoryDetail {}
 
 export interface CareStackProvider {
   id: string
@@ -70,6 +83,25 @@ export interface CareStackProvider {
   isActive: boolean
 }
 
+export interface AppointmentDetailModel {
+  id: number
+  patientId: number
+  providerId: number
+  locationId: number
+  operatoryId?: number
+  startTime: string
+  endTime: string
+  status: 'scheduled' | 'confirmed' | 'arrived' | 'in_progress' | 'completed' | 'cancelled' | 'no_show'
+  procedureCode?: string
+  description?: string
+  notes?: string
+  duration?: number
+  isNewPatient?: boolean
+  createdAt?: string
+  updatedAt?: string
+}
+
+// Keep backward compatibility alias
 export interface CareStackAppointment {
   id: string
   patientId: string
@@ -88,6 +120,28 @@ export interface CareStackAppointment {
   updatedAt: string
 }
 
+// Patient Search (POST body structure)
+export interface SearchRequest {
+  searchCriteria: {
+    firstName?: string
+    lastName?: string
+    phone?: string
+    email?: string
+    dateOfBirth?: string
+  }
+  pageNumber?: number
+  pageSize?: number
+}
+
+export interface PatientSearchResponseModel {
+  patients: PatientViewModel[]
+  totalCount: number
+  pageNumber: number
+  pageSize: number
+  totalPages: number
+}
+
+// Keep backward compatibility
 export interface CareStackSearchPatientsRequest {
   q?: string
   phone?: string
@@ -98,7 +152,7 @@ export interface CareStackSearchPatientsRequest {
 }
 
 export interface CareStackSearchPatientsResponse {
-  items: CareStackPatient[]
+  items: PatientViewModel[]
   total: number
   page: number
   pageSize: number
@@ -108,8 +162,10 @@ export interface CareStackSearchPatientsResponse {
 export interface CareStackCreatePatientRequest {
   firstName: string
   lastName: string
-  dob?: string
-  phone?: string
+  dateOfBirth?: string
+  mobileNumber?: string
+  homeNumber?: string
+  workNumber?: string
   email?: string
   insuranceCarrier?: string
   memberId?: string
@@ -120,29 +176,39 @@ export interface CareStackCreatePatientRequest {
 }
 
 export interface CareStackCreateAppointmentRequest {
-  patientId: string
-  providerId: string
-  locationId: string
-  operatoryId?: string
-  start: string
-  end: string
-  code?: string
+  patientId: number
+  providerId: number
+  locationId: number
+  operatoryId?: number
+  startTime: string
+  endTime: string
+  procedureCode?: string
   description?: string
   notes?: string
   isNewPatient?: boolean
-  idempotencyKey?: string
 }
 
 export interface CareStackListLocationsResponse {
-  locations: CareStackLocation[]
-}
-
-export interface CareStackListOperatoriesRequest {
-  locationId: string
+  locations: LocationDetailModel[]
 }
 
 export interface CareStackListOperatoriesResponse {
-  operatories: CareStackOperatory[]
+  operatories: OperatoryDetail[]
+}
+
+// New API response models
+export interface AppointmentStatusExternalModel {
+  id: number
+  name: string
+  isActive: boolean
+}
+
+export interface ProcedureCodeBasicApiResponseModel {
+  id: number
+  code: string
+  description: string
+  category?: string
+  fee?: number
 }
 
 export interface CareStackErrorResponse {
@@ -166,7 +232,7 @@ export interface CareStackCacheItem<T> {
 }
 
 export interface CareStackCache {
-  locations: Map<string, CareStackCacheItem<CareStackLocation[]>>
-  operatories: Map<string, CareStackCacheItem<CareStackOperatory[]>>
+  locations: Map<string, CareStackCacheItem<LocationDetailModel[]>>
+  operatories: Map<string, CareStackCacheItem<OperatoryDetail[]>>
   providers: Map<string, CareStackCacheItem<CareStackProvider[]>>
 }
