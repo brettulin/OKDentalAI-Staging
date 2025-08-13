@@ -3,11 +3,13 @@ import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { SecurityDashboard } from '@/components/security/SecurityDashboard';
+import { EnhancedSecurityDashboard } from '@/components/security/EnhancedSecurityDashboard';
+import { RealtimeMonitoringDashboard } from '@/components/realtime/RealtimeMonitoringDashboard';
 import { SecurityBanner } from '@/components/security/SecurityBanner';
 import { AdminControls } from '@/components/security/AdminControls';
 import { useAuth } from '@/hooks/useAuth';
 import { useSecurity } from '@/components/security/SecurityProvider';
-import { Settings as SettingsIcon, Shield, Users, Database, Bot, ChevronRight } from 'lucide-react';
+import { Settings as SettingsIcon, Shield, Users, Database, Bot, ChevronRight, Activity } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 const Settings = () => {
@@ -31,9 +33,10 @@ const Settings = () => {
         />
 
         <Tabs defaultValue="general" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-6">
+        <TabsList className="grid w-full grid-cols-7">
           <TabsTrigger value="general">General</TabsTrigger>
           <TabsTrigger value="security">Security</TabsTrigger>
+          <TabsTrigger value="enhanced-security">Enhanced</TabsTrigger>
           <TabsTrigger value="production">Production</TabsTrigger>
           <TabsTrigger value="monitoring">Monitoring</TabsTrigger>
           {hasPermission('manage_users') && (
@@ -91,6 +94,59 @@ const Settings = () => {
               </CardHeader>
               <CardContent>
                 <SecurityDashboard />
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="enhanced-security" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Shield className="h-5 w-5" />
+                  Enhanced Security Monitoring
+                </CardTitle>
+                <CardDescription>
+                  Advanced security metrics, session monitoring, and real-time threat detection
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <EnhancedSecurityDashboard />
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="production" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Activity className="h-5 w-5" />
+                  Production Status
+                </CardTitle>
+                <CardDescription>
+                  System health and production readiness checks
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground">
+                  Production monitoring features will be available here.
+                </p>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="monitoring" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Activity className="h-5 w-5" />
+                  Real-time Monitoring
+                </CardTitle>
+                <CardDescription>
+                  Monitor real-time connections, performance, and system health
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <RealtimeMonitoringDashboard />
               </CardContent>
             </Card>
           </TabsContent>
