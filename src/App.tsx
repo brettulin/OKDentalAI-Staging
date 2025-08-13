@@ -19,6 +19,7 @@ import { Layout } from '@/components/Layout';
 import { AuthProvider, useAuth } from '@/hooks/useAuth';
 import { SecurityProvider } from '@/components/security/SecurityProvider';
 import { SessionTimeout } from '@/components/security/SessionTimeout';
+import { RateLimitProvider } from '@/components/security/RateLimitedAction';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { PageSkeleton } from '@/components/PageSkeleton';
 

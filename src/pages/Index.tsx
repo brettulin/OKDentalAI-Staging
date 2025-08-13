@@ -8,6 +8,8 @@ import { CallSimulator } from '@/components/ai/CallSimulator';
 import { PatientLookup } from '@/components/patients/PatientLookup';
 import { SecurityMonitor } from '@/components/security/SecurityMonitor';
 import { SecurityComplianceDashboard } from '@/components/security/SecurityComplianceDashboard';
+import { SecurityBanner } from '@/components/security/SecurityBanner';
+import { AdminControls } from '@/components/security/AdminControls';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
@@ -16,6 +18,7 @@ import { Bot, Users, Calendar, Settings, Shield } from 'lucide-react';
 export default function Index() {
   const { user } = useAuth();
   const [selectedOfficeId, setSelectedOfficeId] = useState<string>('');
+  const [showSecurityDashboard, setShowSecurityDashboard] = useState(false);
 
   // Fetch user profile to get clinic_id
   const { data: profile, isLoading: userProfileLoading } = useQuery({
@@ -73,6 +76,14 @@ export default function Index() {
   return (
     <ErrorBoundary>
       <div className="container mx-auto py-8 space-y-8">
+        {/* Security Banner */}
+        <SecurityBanner
+          complianceScore={94}
+          hasActiveAlerts={false}
+          isMonitoring={true}
+          onViewSecurity={() => setShowSecurityDashboard(true)}
+        />
+        
         <div className="text-center space-y-4">
           <h1 className="text-4xl font-bold">AI Dental Receptionist</h1>
           <p className="text-xl text-muted-foreground">
@@ -86,7 +97,7 @@ export default function Index() {
         </div>
 
         <Tabs defaultValue="ai-chat" className="w-full">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="ai-chat" className="flex items-center gap-2">
               <Bot className="h-4 w-4" />
               AI Chat
@@ -102,6 +113,10 @@ export default function Index() {
             <TabsTrigger value="security" className="flex items-center gap-2">
               <Shield className="h-4 w-4" />
               Security
+            </TabsTrigger>
+            <TabsTrigger value="admin" className="flex items-center gap-2">
+              <Settings className="h-4 w-4" />
+              Admin
             </TabsTrigger>
           </TabsList>
 
@@ -188,6 +203,10 @@ export default function Index() {
 
           <TabsContent value="security" className="space-y-6">
             <SecurityComplianceDashboard />
+          </TabsContent>
+
+          <TabsContent value="admin" className="space-y-6">
+            <AdminControls />
           </TabsContent>
         </Tabs>
       </div>

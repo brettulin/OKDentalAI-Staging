@@ -1,105 +1,193 @@
-import React from 'react';
-import { useSecurity } from '@/components/security/SecurityProvider';
-import { supabase } from '@/integrations/supabase/client';
+import React, { useState, useCallback, createContext, useContext } from 'react';
+import { useSecurityAudit } from '@/hooks/useSecurityAudit';
+import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 
-interface RateLimitedActionProps {
-  action: string;
-  limit?: number;
-  windowMinutes?: number;
-  onSuccess?: () => void;
-  onRateLimit?: () => void;
-  children: (executeAction: () => Promise<void>) => React.ReactNode;
+interface RateLimitConfig {
+  maxAttempts: number;
+  timeWindowMs: number;
+  blockDurationMs?: number;
 }
 
-export const RateLimitedAction: React.FC<RateLimitedActionProps> = ({
-  action,
-  limit = 10,
-  windowMinutes = 60,
-  onSuccess,
-  onRateLimit,
-  children
-}) => {
-  const { logSecurityEvent } = useSecurity();
+interface RateLimitState {
+  attempts: Map<string, number[]>;
+  blocked: Set<string>;
+}
 
-  const executeAction = async () => {
-    try {
-      // Check rate limit
-      const { data: canProceed, error } = await supabase.rpc('check_rate_limit', {
-        p_action_type: action,
-        p_limit: limit,
-        p_window_minutes: windowMinutes
-      });
+interface RateLimitContextType {
+  executeAction: (
+    actionKey: string, 
+    action: () => Promise<void> | void,
+    config?: Partial<RateLimitConfig>
+  ) => Promise<boolean>;
+  isBlocked: (actionKey: string) => boolean;
+  getAttemptCount: (actionKey: string) => number;
+}
 
-      if (error) throw error;
+const RateLimitContext = createContext<RateLimitContextType | null>(null);
 
-      if (!canProceed) {
-        // Rate limit exceeded
-        await logSecurityEvent('rate_limit_exceeded', 'action', undefined);
-        toast.error(`Rate limit exceeded. Please wait before trying again.`);
-        onRateLimit?.();
-        return;
-      }
-
-      // Log the action
-      await logSecurityEvent(action, 'action', undefined);
-      
-      // Execute the action
-      onSuccess?.();
-      
-    } catch (error: any) {
-      console.error('Rate limited action error:', error);
-      toast.error('Action failed due to security restrictions');
-    }
-  };
-
-  return <>{children(executeAction)}</>;
+const DEFAULT_CONFIG: RateLimitConfig = {
+  maxAttempts: 5,
+  timeWindowMs: 60000, // 1 minute
+  blockDurationMs: 300000, // 5 minutes
 };
 
-// Higher-order component for rate-limited hooks
-export const withRateLimit = <T extends any[]>(
-  hookFn: (...args: T) => any,
-  action: string,
-  limit: number = 10,
-  windowMinutes: number = 60
-) => {
-  return (...args: T) => {
-    const originalHook = hookFn(...args);
-    const { logSecurityEvent } = useSecurity();
+export const RateLimitProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { profile } = useAuth();
+  const { logAccess } = useSecurityAudit();
+  const [rateLimitState, setRateLimitState] = useState<RateLimitState>({
+    attempts: new Map(),
+    blocked: new Set(),
+  });
 
-    const rateLimitedMutate = async (variables: any) => {
-      try {
-        // Check rate limit
-        const { data: canProceed, error } = await supabase.rpc('check_rate_limit', {
-          p_action_type: action,
-          p_limit: limit,
-          p_window_minutes: windowMinutes
-        });
+  const executeAction = useCallback(async (
+    actionKey: string,
+    action: () => Promise<void> | void,
+    config: Partial<RateLimitConfig> = {}
+  ): Promise<boolean> => {
+    const finalConfig = { ...DEFAULT_CONFIG, ...config };
+    const now = Date.now();
+    
+    // Check if action is currently blocked
+    if (rateLimitState.blocked.has(actionKey)) {
+      toast.error('This action is temporarily blocked due to rate limiting.');
+      return false;
+    }
 
-        if (error) throw error;
+    // Get recent attempts for this action
+    const attempts = rateLimitState.attempts.get(actionKey) || [];
+    const recentAttempts = attempts.filter(time => now - time < finalConfig.timeWindowMs);
 
-        if (!canProceed) {
-          await logSecurityEvent('rate_limit_exceeded', 'action', undefined);
-          toast.error(`Rate limit exceeded. Please wait before trying again.`);
-          return;
+    // Check if rate limit exceeded
+    if (recentAttempts.length >= finalConfig.maxAttempts) {
+      // Block the action
+      setRateLimitState(prev => ({
+        ...prev,
+        blocked: new Set([...prev.blocked, actionKey])
+      }));
+
+      // Log rate limiting event
+      await logAccess({
+        action_type: 'rate_limit_exceeded',
+        resource_type: 'user_action',
+        resource_id: actionKey,
+        metadata: {
+          action_key: actionKey,
+          attempts_in_window: recentAttempts.length,
+          max_attempts: finalConfig.maxAttempts,
+          time_window_ms: finalConfig.timeWindowMs,
+          user_id: profile?.user_id,
+          blocked_until: new Date(now + finalConfig.blockDurationMs).toISOString()
         }
+      });
 
-        // Log the action
-        await logSecurityEvent(action, 'action', undefined);
-        
-        // Execute original mutation
-        return originalHook.mutate(variables);
-        
-      } catch (error: any) {
-        console.error('Rate limited mutation error:', error);
-        toast.error('Action failed due to security restrictions');
-      }
-    };
+      toast.error(`Rate limit exceeded for this action. Blocked for ${Math.round(finalConfig.blockDurationMs / 60000)} minutes.`);
 
-    return {
-      ...originalHook,
-      mutate: rateLimitedMutate,
-      mutateAsync: rateLimitedMutate
-    };
-  };
+      // Unblock after block duration
+      setTimeout(() => {
+        setRateLimitState(prev => {
+          const newBlocked = new Set(prev.blocked);
+          newBlocked.delete(actionKey);
+          return {
+            ...prev,
+            blocked: newBlocked,
+            attempts: new Map(prev.attempts).set(actionKey, []) // Reset attempts
+          };
+        });
+      }, finalConfig.blockDurationMs);
+
+      return false;
+    }
+
+    // Record this attempt
+    setRateLimitState(prev => ({
+      ...prev,
+      attempts: new Map(prev.attempts).set(actionKey, [...recentAttempts, now])
+    }));
+
+    try {
+      // Log action attempt
+      await logAccess({
+        action_type: 'rate_limited_action_attempt',
+        resource_type: 'user_action',
+        resource_id: actionKey,
+        metadata: {
+          action_key: actionKey,
+          attempt_number: recentAttempts.length + 1,
+          user_id: profile?.user_id,
+          timestamp: new Date().toISOString()
+        }
+      });
+
+      // Execute the action
+      await action();
+
+      // Log successful action
+      await logAccess({
+        action_type: 'rate_limited_action_success',
+        resource_type: 'user_action',
+        resource_id: actionKey,
+        metadata: {
+          action_key: actionKey,
+          user_id: profile?.user_id,
+          timestamp: new Date().toISOString()
+        }
+      });
+
+      return true;
+    } catch (error) {
+      // Log failed action
+      await logAccess({
+        action_type: 'rate_limited_action_failed',
+        resource_type: 'user_action',
+        resource_id: actionKey,
+        metadata: {
+          action_key: actionKey,
+          user_id: profile?.user_id,
+          error: error instanceof Error ? error.message : 'Unknown error',
+          timestamp: new Date().toISOString()
+        }
+      });
+
+      console.error(`Rate limited action ${actionKey} failed:`, error);
+      throw error;
+    }
+  }, [rateLimitState, profile?.user_id, logAccess]);
+
+  const isBlocked = useCallback((actionKey: string): boolean => {
+    return rateLimitState.blocked.has(actionKey);
+  }, [rateLimitState.blocked]);
+
+  const getAttemptCount = useCallback((actionKey: string): number => {
+    const attempts = rateLimitState.attempts.get(actionKey) || [];
+    const now = Date.now();
+    return attempts.filter(time => now - time < DEFAULT_CONFIG.timeWindowMs).length;
+  }, [rateLimitState.attempts]);
+
+  return (
+    <RateLimitContext.Provider value={{ executeAction, isBlocked, getAttemptCount }}>
+      {children}
+    </RateLimitContext.Provider>
+  );
+};
+
+export const useRateLimit = () => {
+  const context = useContext(RateLimitContext);
+  if (!context) {
+    throw new Error('useRateLimit must be used within a RateLimitProvider');
+  }
+  return context;
+};
+
+// HOC for wrapping components with rate limiting
+export const withRateLimit = <P extends object>(
+  Component: React.ComponentType<P>,
+  actionKey: string,
+  config?: Partial<RateLimitConfig>
+) => {
+  return React.forwardRef<any, P>((props, ref) => (
+    <RateLimitProvider>
+      <Component {...props} ref={ref} />
+    </RateLimitProvider>
+  ));
 };
