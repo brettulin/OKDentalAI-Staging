@@ -766,6 +766,27 @@ export type Database = {
         }
         Relationships: []
       }
+      platform_users: {
+        Row: {
+          created_at: string | null
+          email: string
+          role: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          email: string
+          role: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          email?: string
+          role?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       production_monitoring: {
         Row: {
           check_type: string
@@ -1497,6 +1518,10 @@ export type Database = {
       }
       has_admin_permission: {
         Args: { permission_type: string }
+        Returns: boolean
+      }
+      is_platform_superadmin: {
+        Args: Record<PropertyKey, never>
         Returns: boolean
       }
       log_admin_action: {
