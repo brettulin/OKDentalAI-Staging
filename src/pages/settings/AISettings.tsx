@@ -13,6 +13,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Settings, Save, Loader2, Play, Volume2 } from 'lucide-react';
 import { PageSkeleton } from '@/components/PageSkeleton';
 import { VoiceLatencyTest } from '@/components/ai/VoiceLatencyTest';
+import { RealtimeAIInterface } from '@/components/ai/RealtimeAIInterface';
 
 const AISettingsPage = () => {
   const { profile } = useAuth();
@@ -443,6 +444,16 @@ const AISettingsPage = () => {
         {formData.voice_enabled && (
           <VoiceLatencyTest />
         )}
+
+        {/* OpenAI Realtime AI Interface */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Advanced AI Testing</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <RealtimeAIInterface />
+          </CardContent>
+        </Card>
 
         <div className="flex justify-end">
           <Button 
