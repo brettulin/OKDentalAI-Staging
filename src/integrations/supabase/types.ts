@@ -1394,6 +1394,10 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: undefined
       }
+      automated_threat_detection: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
+      }
       calculate_security_metrics: {
         Args: { p_clinic_id: string }
         Returns: Json
@@ -1448,6 +1452,15 @@ export type Database = {
       }
       emergency_revoke_access: {
         Args: { p_user_id: string; p_reason: string }
+        Returns: undefined
+      }
+      emergency_security_response: {
+        Args: {
+          p_incident_type: string
+          p_severity: string
+          p_description: string
+          p_immediate_action?: string
+        }
         Returns: undefined
       }
       encrypt_patient_field: {
@@ -1581,6 +1594,16 @@ export type Database = {
           check_name: string
           status: string
           details: string
+        }[]
+      }
+      validate_security_compliance: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          check_name: string
+          status: string
+          severity: string
+          description: string
+          remediation: string
         }[]
       }
       validate_session_integrity: {
