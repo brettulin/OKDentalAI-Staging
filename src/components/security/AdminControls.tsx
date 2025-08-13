@@ -20,6 +20,8 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 
+type AdminRoleType = 'technical_admin' | 'medical_admin' | 'clinic_admin' | null;
+
 export const AdminControls: React.FC = () => {
   const { profile } = useAuth();
   const { hasPermission } = useSecurity();
@@ -62,7 +64,7 @@ export const AdminControls: React.FC = () => {
 
   const handleAdminRoleChange = async (userId: string, newAdminRole: string) => {
     try {
-      const adminRoleValue = newAdminRole === 'none' ? null : newAdminRole;
+      const adminRoleValue: AdminRoleType = newAdminRole === 'none' ? null : newAdminRole as AdminRoleType;
       
       const { error } = await supabase
         .from('profiles')
