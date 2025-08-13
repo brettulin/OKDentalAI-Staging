@@ -884,6 +884,14 @@ export type Database = {
         Args: { target_user_id: string; new_role: string }
         Returns: undefined
       }
+      validate_production_readiness: {
+        Args: { p_clinic_id: string }
+        Returns: {
+          check_name: string
+          status: string
+          details: string
+        }[]
+      }
     }
     Enums: {
       admin_role_type: "technical_admin" | "medical_admin" | "clinic_admin"
