@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
-import { Phone, Users, Calendar, Settings, LogOut, Home, Database, Shield, BarChart3, Building, ClipboardCheck, Zap } from 'lucide-react';
+import { Phone, Users, Calendar, Settings, LogOut, Home, Database, Shield, BarChart3, Building, ClipboardCheck, Zap, Globe } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { DebugPanel } from '@/components/debug/DebugPanel';
 
@@ -118,6 +118,7 @@ const Sidebar = () => {
     { icon: Shield, label: 'Production', href: '/production' },
     { icon: Building, label: 'Enterprise', href: '/enterprise' },
     { icon: Zap, label: 'Optimization', href: '/optimization' },
+    { icon: Globe, label: 'Global', href: '/global' },
     { icon: Settings, label: 'Settings', href: '/settings' },
   ];
 

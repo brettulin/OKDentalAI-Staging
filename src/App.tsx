@@ -19,6 +19,7 @@ import NotFound from '@/pages/NotFound';
 import Analytics from '@/pages/Analytics';
 import Enterprise from '@/pages/Enterprise';
 import Optimization from '@/pages/Optimization';
+import Global from '@/pages/Global';
 import { Layout } from '@/components/Layout';
 import { AuthProvider, useAuth } from '@/hooks/useAuth';
 import { SecurityProvider } from '@/components/security/SecurityProvider';
@@ -214,6 +215,14 @@ function App() {
                  element={
                    <ProtectedRoute>
                      <Layout><Optimization /></Layout>
+                   </ProtectedRoute>
+                 } 
+               />
+               <Route 
+                 path="/global" 
+                 element={
+                   <ProtectedRoute>
+                     <Layout><Global /></Layout>
                    </ProtectedRoute>
                  } 
                />
