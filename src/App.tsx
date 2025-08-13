@@ -17,6 +17,8 @@ import QA from '@/pages/QA';
 import Production from '@/pages/Production';
 import NotFound from '@/pages/NotFound';
 import Analytics from '@/pages/Analytics';
+import Enterprise from '@/pages/Enterprise';
+import Optimization from '@/pages/Optimization';
 import { Layout } from '@/components/Layout';
 import { AuthProvider, useAuth } from '@/hooks/useAuth';
 import { SecurityProvider } from '@/components/security/SecurityProvider';
@@ -191,15 +193,31 @@ function App() {
                   </ProtectedRoute>
                 } 
               />
-              <Route 
-                path="/production" 
-                element={
-                  <ProtectedRoute>
-                    <Layout><Production /></Layout>
-                  </ProtectedRoute>
-                } 
-              />
-              <Route path="*" element={<NotFound />} />
+               <Route 
+                 path="/production" 
+                 element={
+                   <ProtectedRoute>
+                     <Layout><Production /></Layout>
+                   </ProtectedRoute>
+                 } 
+               />
+               <Route 
+                 path="/enterprise" 
+                 element={
+                   <ProtectedRoute>
+                     <Layout><Enterprise /></Layout>
+                   </ProtectedRoute>
+                 } 
+               />
+               <Route 
+                 path="/optimization" 
+                 element={
+                   <ProtectedRoute>
+                     <Layout><Optimization /></Layout>
+                   </ProtectedRoute>
+                 } 
+               />
+               <Route path="*" element={<NotFound />} />
             </Routes>
           </Router>
         </SecurityProvider>
