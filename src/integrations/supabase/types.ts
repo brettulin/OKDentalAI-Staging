@@ -115,6 +115,13 @@ export type Database = {
             foreignKeyName: "appointments_office_id_fkey"
             columns: ["office_id"]
             isOneToOne: false
+            referencedRelation: "office_pms_status"
+            referencedColumns: ["office_id"]
+          },
+          {
+            foreignKeyName: "appointments_office_id_fkey"
+            columns: ["office_id"]
+            isOneToOne: false
             referencedRelation: "offices"
             referencedColumns: ["id"]
           },
@@ -270,6 +277,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "clinics"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "calls_office_id_fkey"
+            columns: ["office_id"]
+            isOneToOne: false
+            referencedRelation: "office_pms_status"
+            referencedColumns: ["office_id"]
           },
           {
             foreignKeyName: "calls_office_id_fkey"
@@ -489,6 +503,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "clinics"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "patients_office_id_fkey"
+            columns: ["office_id"]
+            isOneToOne: false
+            referencedRelation: "office_pms_status"
+            referencedColumns: ["office_id"]
           },
           {
             foreignKeyName: "patients_office_id_fkey"
@@ -813,7 +834,36 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      office_pms_status: {
+        Row: {
+          clinic_id: string | null
+          created_at: string | null
+          has_credentials: boolean | null
+          name: string | null
+          office_id: string | null
+          pms_type: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          clinic_id?: string | null
+          created_at?: string | null
+          has_credentials?: never
+          name?: string | null
+          office_id?: string | null
+          pms_type?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          clinic_id?: string | null
+          created_at?: string | null
+          has_credentials?: never
+          name?: string | null
+          office_id?: string | null
+          pms_type?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       calculate_security_metrics: {
