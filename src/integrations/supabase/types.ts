@@ -892,6 +892,30 @@ export type Database = {
         Args: { patient_id: string }
         Returns: boolean
       }
+      validate_call_transcript_access: {
+        Args: { p_call_id: string; p_operation: string }
+        Returns: boolean
+      }
+      validate_comprehensive_access: {
+        Args: {
+          p_resource_type: string
+          p_resource_id: string
+          p_operation: string
+        }
+        Returns: boolean
+      }
+      validate_conversation_access: {
+        Args: { p_call_id: string }
+        Returns: boolean
+      }
+      validate_patient_access_with_logging: {
+        Args: { p_patient_id: string; p_operation: string }
+        Returns: boolean
+      }
+      validate_pms_credential_access: {
+        Args: { p_office_id: string; p_purpose: string }
+        Returns: boolean
+      }
       validate_production_readiness: {
         Args: { p_clinic_id: string }
         Returns: {

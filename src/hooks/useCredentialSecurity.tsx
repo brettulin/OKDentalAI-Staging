@@ -22,22 +22,14 @@ export const useCredentialSecurity = () => {
     if (!profile?.clinic_id) return false;
 
     try {
-      // Check if user has permission for PMS credential access
-      const hasPermission = profile.role === 'owner' || 
-                           (profile.admin_role === 'technical_admin');
+      // Use enhanced database validation
+      const { data: hasPermission, error } = await supabase.rpc('validate_pms_credential_access', {
+        p_office_id: accessRequest.officeId,
+        p_purpose: accessRequest.purpose
+      });
 
-      if (!hasPermission) {
-        await logAccess({
-          action_type: 'credential_access_denied',
-          resource_type: 'pms_credentials',
-          resource_id: accessRequest.officeId,
-          metadata: {
-            reason: 'insufficient_permissions',
-            purpose: accessRequest.purpose,
-            user_role: profile.role,
-            admin_role: profile.admin_role
-          }
-        });
+      if (error || !hasPermission) {
+        console.error('PMS credential access denied:', error?.message);
         return false;
       }
 

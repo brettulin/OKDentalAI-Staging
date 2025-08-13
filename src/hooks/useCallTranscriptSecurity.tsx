@@ -13,102 +13,23 @@ export const useCallTranscriptSecurity = () => {
   const { profile } = useAuth();
   const { logAccess } = useSecurityAudit();
 
-  // Validate call transcript access based on patient relationships
+  // Enhanced call transcript access validation with database-level security
   const validateCallAccess = useCallback(async (callId: string, operation: string): Promise<boolean> => {
     if (!profile?.clinic_id) return false;
 
     try {
-      // Get call details to check patient relationship
-      const { data: call, error: callError } = await supabase
-        .from('calls')
-        .select(`
-          *,
-          clinic_id,
-          caller_phone
-        `)
-        .eq('id', callId)
-        .eq('clinic_id', profile.clinic_id)
-        .single();
+      // Use enhanced database validation with automatic logging and risk assessment
+      const { data, error } = await supabase.rpc('validate_call_transcript_access', {
+        p_call_id: callId,
+        p_operation: operation
+      });
 
-      if (callError || !call) {
-        await logAccess({
-          action_type: 'call_access_denied',
-          resource_type: 'call_transcript',
-          resource_id: callId,
-          metadata: {
-            reason: 'call_not_found',
-            operation,
-            error: callError?.message
-          }
-        });
+      if (error) {
+        console.error('Call access validation error:', error);
         return false;
       }
 
-      // Check if user has permission based on role
-      const hasGeneralAccess = profile.role === 'owner' || profile.role === 'doctor';
-      
-      if (hasGeneralAccess) {
-        await logAccess({
-          action_type: 'call_access_granted',
-          resource_type: 'call_transcript',
-          resource_id: callId,
-          metadata: {
-            access_type: 'general_permission',
-            operation,
-            user_role: profile.role
-          }
-        });
-        return true;
-      }
-
-      // For other roles, check if they're assigned to this call or related patient
-      const isAssignedToCall = call.assigned_to === profile.user_id;
-
-      // Check if user has access to patients linked to this phone number
-      if (call.caller_phone) {
-        const { data: hasPatientAccess } = await supabase
-          .from('patients')
-          .select('id')
-          .eq('clinic_id', profile.clinic_id)
-          .eq('phone', call.caller_phone)
-          .limit(1);
-
-        if (hasPatientAccess && hasPatientAccess.length > 0) {
-          const patientId = hasPatientAccess[0].id;
-          const { data: canAccessPatient } = await supabase.rpc('user_can_access_patient', {
-            patient_id: patientId
-          });
-
-          if (canAccessPatient || isAssignedToCall) {
-            await logAccess({
-              action_type: 'call_access_granted',
-              resource_type: 'call_transcript',
-              resource_id: callId,
-              metadata: {
-                access_type: 'patient_relationship',
-                operation,
-                patient_id: patientId,
-                assigned_to_call: isAssignedToCall
-              }
-            });
-            return true;
-          }
-        }
-      }
-
-      // Access denied
-      await logAccess({
-        action_type: 'call_access_denied',
-        resource_type: 'call_transcript',
-        resource_id: callId,
-        metadata: {
-          reason: 'insufficient_permissions',
-          operation,
-          user_role: profile.role,
-          assigned_to_call: isAssignedToCall
-        }
-      });
-      return false;
+      return data;
 
     } catch (error) {
       console.error('Call access validation failed:', error);

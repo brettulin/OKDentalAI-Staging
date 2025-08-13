@@ -13,41 +13,21 @@ export const useEnhancedPatientSecurity = () => {
   const { profile } = useAuth();
   const { logAccess } = useSecurityAudit();
 
-  // Enhanced patient access validation
+  // Enhanced patient access validation with database-level security
   const validatePatientAccess = useCallback(async (patientId: string, operation: string): Promise<boolean> => {
     if (!profile?.clinic_id) return false;
 
     try {
-      const { data, error } = await supabase.rpc('user_can_access_patient', {
-        patient_id: patientId
+      // Use enhanced database validation with automatic logging
+      const { data, error } = await supabase.rpc('validate_patient_access_with_logging', {
+        p_patient_id: patientId,
+        p_operation: operation
       });
 
       if (error) {
         console.error('Patient access validation error:', error);
-        await logAccess({
-          action_type: 'patient_access_denied',
-          resource_type: 'patient',
-          resource_id: patientId,
-          metadata: {
-            reason: 'validation_error',
-            operation,
-            error: error.message
-          }
-        });
         return false;
       }
-
-      // Log access attempt
-      await logAccess({
-        action_type: data ? 'patient_access_granted' : 'patient_access_denied',
-        resource_type: 'patient',
-        resource_id: patientId,
-        metadata: {
-          operation,
-          user_role: profile.role,
-          admin_role: profile.admin_role
-        }
-      });
 
       return data;
     } catch (error) {

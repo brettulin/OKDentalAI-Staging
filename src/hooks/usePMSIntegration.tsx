@@ -159,23 +159,24 @@ export function usePMSIntegration() {
       officeId: string; 
       [key: string]: any 
     }) => {
-      // Enhanced credential access control
+      // Enhanced credential access control with database validation
       if (officeId) {
-        // Check if user has active credential access
-        if (!validateCredentialAccess(officeId)) {
-          // Request credential access for this operation
-          const accessGranted = await requestCredentialAccess({
-            officeId,
-            purpose: `PMS operation: ${action}`,
-            metadata: { action, timestamp: new Date().toISOString() }
-          });
-
-          if (!accessGranted) {
-            throw new Error('Credential access denied for PMS operation');
+        // Use comprehensive access validation
+        const accessGranted = await requestCredentialAccess({
+          officeId,
+          purpose: `PMS operation: ${action}`,
+          metadata: { 
+            action, 
+            timestamp: new Date().toISOString(),
+            risk_level: action.includes('delete') || action.includes('export') ? 'critical' : 'normal'
           }
+        });
+
+        if (!accessGranted) {
+          throw new Error('Enhanced credential access denied for PMS operation');
         }
 
-        // Monitor credential access patterns
+        // Monitor credential access patterns with enhanced detection
         await monitorCredentialAccess(officeId);
       }
 
