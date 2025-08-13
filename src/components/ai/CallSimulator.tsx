@@ -6,6 +6,8 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Mic, MicOff, Phone, PhoneOff, Send, Volume2, Bot, User } from 'lucide-react';
 import { useAICallHandler } from '@/hooks/useAICallHandler';
 import { useAdvancedVoiceInterface } from '@/hooks/useAdvancedVoiceInterface';
+import { useEnhancedSecurity } from '@/hooks/useEnhancedSecurity';
+import { useVoicePerformance } from '@/hooks/useVoicePerformance';
 import { VoiceControls } from './VoiceControls';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/components/ui/use-toast';
@@ -70,8 +72,22 @@ export function CallSimulator({ officeId }: CallSimulatorProps) {
     interruptSpeech
   } = useAdvancedVoiceInterface();
 
+  const { validateAccess, logSecurityEvent, securityMetrics } = useEnhancedSecurity();
+  const { logPerformance } = useVoicePerformance();
+
   const handleStartCall = async () => {
     try {
+      // Validate access to AI call simulation
+      const accessValidation = await validateAccess('ai_call', officeId, 'simulate', 'internal');
+      if (!accessValidation.isValid) {
+        toast({
+          title: "Access Denied",
+          description: accessValidation.reason || "Cannot start call simulation",
+          variant: "destructive",
+        });
+        return;
+      }
+
       const newCallId = crypto.randomUUID();
       const result = await startCall({
         callId: newCallId,
@@ -86,17 +102,58 @@ export function CallSimulator({ officeId }: CallSimulatorProps) {
       }]);
       setCallContext(result.context);
 
+      // Log security event
+      await logSecurityEvent('call_simulation_started', 'ai_call', newCallId, 'normal', {
+        officeId,
+        voiceEnabled: useVoice,
+        sessionId: newCallId
+      });
+
       // If voice mode is enabled, speak the initial greeting using clinic settings
       if (useVoice) {
+        const startTime = performance.now();
         const greeting = result.initialResponse || "Hello! Thank you for calling. How can I help you today?";
-        await synthesizeSpeech(
-          greeting,
-          (aiSettings as any)?.voice_id,
-          aiSettings?.voice_model
-        );
+        
+        try {
+          await synthesizeSpeech(
+            greeting,
+            (aiSettings as any)?.voice_id,
+            aiSettings?.voice_model
+          );
+          
+          const latency = performance.now() - startTime;
+          await logPerformance({
+            operationType: 'synthesis',
+            latencyMs: Math.round(latency),
+            success: true,
+            voiceModel: aiSettings?.voice_model,
+            voiceId: (aiSettings as any)?.voice_id,
+            textLength: greeting.length,
+            metadata: {
+              context: 'call_greeting',
+              callId: newCallId
+            }
+          });
+        } catch (voiceError) {
+          console.error('Voice synthesis error:', voiceError);
+          await logPerformance({
+            operationType: 'synthesis',
+            latencyMs: Math.round(performance.now() - startTime),
+            success: false,
+            errorMessage: voiceError instanceof Error ? voiceError.message : 'Unknown error',
+            voiceModel: aiSettings?.voice_model,
+            voiceId: (aiSettings as any)?.voice_id,
+            textLength: greeting.length
+          });
+        }
       }
     } catch (error) {
       console.error('Error starting call:', error);
+      await logSecurityEvent('call_simulation_failed', 'ai_call', undefined, 'high', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        officeId
+      });
+      
       toast({
         title: "Error",
         description: "Failed to start call. Please try again.",
@@ -158,11 +215,39 @@ export function CallSimulator({ officeId }: CallSimulatorProps) {
 
         // If voice mode is enabled, synthesize the AI response using clinic settings
         if (useVoice) {
-          await synthesizeSpeech(
-            response.ai_response,
-            (aiSettings as any)?.voice_id,
-            aiSettings?.voice_model
-          );
+          const startTime = performance.now();
+          try {
+            await synthesizeSpeech(
+              response.ai_response,
+              (aiSettings as any)?.voice_id,
+              aiSettings?.voice_model
+            );
+            
+            const latency = performance.now() - startTime;
+            await logPerformance({
+              operationType: 'synthesis',
+              latencyMs: Math.round(latency),
+              success: true,
+              voiceModel: aiSettings?.voice_model,
+              voiceId: (aiSettings as any)?.voice_id,
+              textLength: response.ai_response.length,
+              metadata: {
+                context: 'ai_response',
+                callId
+              }
+            });
+          } catch (voiceError) {
+            console.error('Voice synthesis error:', voiceError);
+            await logPerformance({
+              operationType: 'synthesis',
+              latencyMs: Math.round(performance.now() - startTime),
+              success: false,
+              errorMessage: voiceError instanceof Error ? voiceError.message : 'Unknown error',
+              voiceModel: aiSettings?.voice_model,
+              voiceId: (aiSettings as any)?.voice_id,
+              textLength: response.ai_response.length
+            });
+          }
         }
       }
     } catch (error) {
@@ -176,19 +261,49 @@ export function CallSimulator({ officeId }: CallSimulatorProps) {
   };
 
   const handleVoiceRecord = async () => {
+    const startTime = performance.now();
     try {
       const audioBase64 = await stopRecording();
       const transcription = await transcribeAudio(audioBase64, 'audio/webm');
       
-      if (transcription.trim()) {
-        // Store audio artifact in call turn metadata
-        if (callId) {
-          console.log('Voice input transcribed:', { transcription, audioLength: audioBase64.length });
+      const latency = performance.now() - startTime;
+      await logPerformance({
+        operationType: 'transcription',
+        latencyMs: Math.round(latency),
+        success: !!transcription.trim(),
+        metadata: {
+          audioLength: audioBase64.length,
+          transcriptionLength: transcription.length,
+          callId,
+          context: 'user_voice_input'
         }
+      });
+      
+      if (transcription.trim()) {
+        // Log security event for voice input
+        await logSecurityEvent('voice_input_processed', 'call_transcript', callId, 'normal', {
+          transcriptionLength: transcription.length,
+          audioLength: audioBase64.length
+        });
+        
+        console.log('Voice input transcribed:', { transcription, audioLength: audioBase64.length });
         await handleSendMessage(transcription);
       }
     } catch (error) {
       console.error('Voice recording error:', error);
+      
+      const latency = performance.now() - startTime;
+      await logPerformance({
+        operationType: 'transcription',
+        latencyMs: Math.round(latency),
+        success: false,
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
+        metadata: {
+          callId,
+          context: 'user_voice_input_failed'
+        }
+      });
+      
       toast({
         title: "Voice Error",
         description: "Failed to process voice input. Please try again.",

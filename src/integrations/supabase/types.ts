@@ -444,6 +444,111 @@ export type Database = {
         }
         Relationships: []
       }
+      enhanced_security_audit_log: {
+        Row: {
+          action_type: string
+          clinic_id: string
+          created_at: string | null
+          data_classification: string | null
+          device_fingerprint: string | null
+          id: string
+          ip_address: unknown | null
+          metadata: Json | null
+          requires_investigation: boolean | null
+          resource_id: string | null
+          resource_type: string
+          risk_level: string | null
+          session_id: string | null
+          user_agent: string | null
+          user_id: string | null
+        }
+        Insert: {
+          action_type: string
+          clinic_id: string
+          created_at?: string | null
+          data_classification?: string | null
+          device_fingerprint?: string | null
+          id?: string
+          ip_address?: unknown | null
+          metadata?: Json | null
+          requires_investigation?: boolean | null
+          resource_id?: string | null
+          resource_type: string
+          risk_level?: string | null
+          session_id?: string | null
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          action_type?: string
+          clinic_id?: string
+          created_at?: string | null
+          data_classification?: string | null
+          device_fingerprint?: string | null
+          id?: string
+          ip_address?: unknown | null
+          metadata?: Json | null
+          requires_investigation?: boolean | null
+          resource_id?: string | null
+          resource_type?: string
+          risk_level?: string | null
+          session_id?: string | null
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      enhanced_user_sessions: {
+        Row: {
+          clinic_id: string
+          created_at: string | null
+          device_fingerprint: string | null
+          expires_at: string
+          id: string
+          ip_address: unknown | null
+          is_active: boolean | null
+          last_activity: string | null
+          mfa_verified: boolean | null
+          risk_score: number | null
+          security_level: string | null
+          session_token: string
+          user_agent: string | null
+          user_id: string
+        }
+        Insert: {
+          clinic_id: string
+          created_at?: string | null
+          device_fingerprint?: string | null
+          expires_at: string
+          id?: string
+          ip_address?: unknown | null
+          is_active?: boolean | null
+          last_activity?: string | null
+          mfa_verified?: boolean | null
+          risk_score?: number | null
+          security_level?: string | null
+          session_token: string
+          user_agent?: string | null
+          user_id: string
+        }
+        Update: {
+          clinic_id?: string
+          created_at?: string | null
+          device_fingerprint?: string | null
+          expires_at?: string
+          id?: string
+          ip_address?: unknown | null
+          is_active?: boolean | null
+          last_activity?: string | null
+          mfa_verified?: boolean | null
+          risk_score?: number | null
+          security_level?: string | null
+          session_token?: string
+          user_agent?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       insurances: {
         Row: {
           accepted: boolean | null
@@ -1225,6 +1330,54 @@ export type Database = {
         }
         Relationships: []
       }
+      voice_performance_metrics: {
+        Row: {
+          audio_duration_ms: number | null
+          clinic_id: string
+          created_at: string | null
+          error_message: string | null
+          id: string
+          latency_ms: number | null
+          metadata: Json | null
+          operation_type: string
+          success: boolean | null
+          text_length: number | null
+          user_id: string | null
+          voice_id: string | null
+          voice_model: string | null
+        }
+        Insert: {
+          audio_duration_ms?: number | null
+          clinic_id: string
+          created_at?: string | null
+          error_message?: string | null
+          id?: string
+          latency_ms?: number | null
+          metadata?: Json | null
+          operation_type: string
+          success?: boolean | null
+          text_length?: number | null
+          user_id?: string | null
+          voice_id?: string | null
+          voice_model?: string | null
+        }
+        Update: {
+          audio_duration_ms?: number | null
+          clinic_id?: string
+          created_at?: string | null
+          error_message?: string | null
+          id?: string
+          latency_ms?: number | null
+          metadata?: Json | null
+          operation_type?: string
+          success?: boolean | null
+          text_length?: number | null
+          user_id?: string | null
+          voice_id?: string | null
+          voice_model?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -1290,6 +1443,10 @@ export type Database = {
         Args: { p_user_id: string; p_reason: string }
         Returns: undefined
       }
+      encrypt_patient_field: {
+        Args: { p_value: string; p_field_type: string }
+        Returns: string
+      }
       encrypt_sensitive_field: {
         Args: { p_value: string; p_context?: string }
         Returns: string
@@ -1341,6 +1498,20 @@ export type Database = {
         }
         Returns: undefined
       }
+      log_voice_performance: {
+        Args: {
+          p_operation_type: string
+          p_latency_ms: number
+          p_success: boolean
+          p_error_message?: string
+          p_voice_model?: string
+          p_voice_id?: string
+          p_text_length?: number
+          p_audio_duration_ms?: number
+          p_metadata?: Json
+        }
+        Returns: undefined
+      }
       update_admin_role: {
         Args: {
           target_user_id: string
@@ -1354,6 +1525,10 @@ export type Database = {
       }
       user_can_access_patient: {
         Args: { patient_id: string }
+        Returns: boolean
+      }
+      validate_call_access_enhanced: {
+        Args: { p_call_id: string; p_operation: string }
         Returns: boolean
       }
       validate_call_transcript_access: {
@@ -1370,6 +1545,15 @@ export type Database = {
       }
       validate_conversation_access: {
         Args: { p_call_id: string }
+        Returns: boolean
+      }
+      validate_enhanced_access: {
+        Args: {
+          p_resource_type: string
+          p_resource_id: string
+          p_operation: string
+          p_data_classification?: string
+        }
         Returns: boolean
       }
       validate_patient_access_with_logging: {
