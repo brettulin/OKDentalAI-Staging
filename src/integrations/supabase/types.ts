@@ -816,6 +816,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      calculate_security_metrics: {
+        Args: { p_clinic_id: string }
+        Returns: Json
+      }
       check_rate_limit: {
         Args: {
           p_action_type: string
@@ -825,6 +829,10 @@ export type Database = {
         Returns: boolean
       }
       cleanup_old_data: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
+      }
+      cleanup_old_sensitive_data: {
         Args: Record<PropertyKey, never>
         Returns: undefined
       }
@@ -841,6 +849,14 @@ export type Database = {
           p_metadata?: Json
         }
         Returns: undefined
+      }
+      emergency_revoke_access: {
+        Args: { p_user_id: string; p_reason: string }
+        Returns: undefined
+      }
+      encrypt_sensitive_field: {
+        Args: { p_value: string; p_context?: string }
+        Returns: string
       }
       get_allowed_call_outcomes: {
         Args: Record<PropertyKey, never>
