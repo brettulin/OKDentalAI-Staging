@@ -2,8 +2,10 @@ import React from 'react';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { EmptyState } from '@/components/EmptyState';
 import { PMSSetup } from '@/components/dashboard/PMSSetup';
+import { PMSHealthDashboard } from '@/components/pms/PMSHealthDashboard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Settings, Database, Shield, CheckCircle } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Settings, Database, Shield, CheckCircle, Activity } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -99,8 +101,37 @@ export default function PMS() {
           </Card>
         </div>
 
-        {/* PMS Setup Component */}
-        <PMSSetup />
+        {/* Main PMS Management Interface */}
+        <Tabs defaultValue="setup" className="space-y-6">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="setup">
+              <Settings className="mr-2 h-4 w-4" />
+              Setup & Configuration
+            </TabsTrigger>
+            <TabsTrigger value="monitoring">
+              <Activity className="mr-2 h-4 w-4" />
+              Health Monitoring
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="setup">
+            <PMSSetup />
+          </TabsContent>
+
+          <TabsContent value="monitoring">
+            <Card>
+              <CardHeader>
+                <CardTitle>PMS System Health Monitor</CardTitle>
+                <p className="text-muted-foreground">
+                  Monitor the health and performance of your Practice Management System integrations
+                </p>
+              </CardHeader>
+              <CardContent>
+                <PMSHealthDashboard />
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
       </div>
     </ErrorBoundary>
   );
