@@ -581,6 +581,39 @@ export type Database = {
           },
         ]
       }
+      invites: {
+        Row: {
+          accepted_at: string | null
+          clinic_name: string
+          created_at: string
+          email: string
+          expires_at: string
+          id: string
+          invite_code: string
+          invited_by: string | null
+        }
+        Insert: {
+          accepted_at?: string | null
+          clinic_name: string
+          created_at?: string
+          email: string
+          expires_at?: string
+          id?: string
+          invite_code?: string
+          invited_by?: string | null
+        }
+        Update: {
+          accepted_at?: string | null
+          clinic_name?: string
+          created_at?: string
+          email?: string
+          expires_at?: string
+          id?: string
+          invite_code?: string
+          invited_by?: string | null
+        }
+        Relationships: []
+      }
       locations: {
         Row: {
           address: string | null
@@ -1404,6 +1437,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      accept_invite: {
+        Args: { p_invite_code: string }
+        Returns: Json
+      }
       audit_function_security: {
         Args: Record<PropertyKey, never>
         Returns: {
@@ -1452,6 +1489,10 @@ export type Database = {
           details: string
           priority: string
         }[]
+      }
+      create_clinic_for_new_user: {
+        Args: { p_clinic_name: string; p_invite_code?: string }
+        Returns: string
       }
       create_security_alert: {
         Args: {
