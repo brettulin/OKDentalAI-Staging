@@ -182,6 +182,42 @@ export type Database = {
           },
         ]
       }
+      backup_schedules: {
+        Row: {
+          backup_type: string
+          clinic_id: string
+          created_at: string | null
+          frequency: string
+          id: string
+          last_backup: string | null
+          next_backup: string | null
+          retention_days: number | null
+          status: string | null
+        }
+        Insert: {
+          backup_type: string
+          clinic_id: string
+          created_at?: string | null
+          frequency: string
+          id?: string
+          last_backup?: string | null
+          next_backup?: string | null
+          retention_days?: number | null
+          status?: string | null
+        }
+        Update: {
+          backup_type?: string
+          clinic_id?: string
+          created_at?: string | null
+          frequency?: string
+          id?: string
+          last_backup?: string | null
+          next_backup?: string | null
+          retention_days?: number | null
+          status?: string | null
+        }
+        Relationships: []
+      }
       call_events: {
         Row: {
           call_id: string
@@ -592,6 +628,69 @@ export type Database = {
           },
         ]
       }
+      performance_metrics: {
+        Row: {
+          clinic_id: string
+          endpoint: string
+          id: string
+          metadata: Json | null
+          recorded_at: string | null
+          response_time_ms: number
+          status_code: number
+          user_id: string | null
+        }
+        Insert: {
+          clinic_id: string
+          endpoint: string
+          id?: string
+          metadata?: Json | null
+          recorded_at?: string | null
+          response_time_ms: number
+          status_code: number
+          user_id?: string | null
+        }
+        Update: {
+          clinic_id?: string
+          endpoint?: string
+          id?: string
+          metadata?: Json | null
+          recorded_at?: string | null
+          response_time_ms?: number
+          status_code?: number
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      production_monitoring: {
+        Row: {
+          check_type: string
+          clinic_id: string
+          created_at: string | null
+          details: Json | null
+          id: string
+          last_checked: string | null
+          status: string
+        }
+        Insert: {
+          check_type: string
+          clinic_id: string
+          created_at?: string | null
+          details?: Json | null
+          id?: string
+          last_checked?: string | null
+          status: string
+        }
+        Update: {
+          check_type?: string
+          clinic_id?: string
+          created_at?: string | null
+          details?: Json | null
+          id?: string
+          last_checked?: string | null
+          status?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           admin_role: Database["public"]["Enums"]["admin_role_type"] | null
@@ -773,6 +872,48 @@ export type Database = {
         }
         Relationships: []
       }
+      security_incidents: {
+        Row: {
+          assigned_to: string | null
+          clinic_id: string
+          created_at: string | null
+          description: string
+          id: string
+          incident_type: string
+          metadata: Json | null
+          resolution_notes: string | null
+          resolved_at: string | null
+          severity: string
+          status: string | null
+        }
+        Insert: {
+          assigned_to?: string | null
+          clinic_id: string
+          created_at?: string | null
+          description: string
+          id?: string
+          incident_type: string
+          metadata?: Json | null
+          resolution_notes?: string | null
+          resolved_at?: string | null
+          severity: string
+          status?: string | null
+        }
+        Update: {
+          assigned_to?: string | null
+          clinic_id?: string
+          created_at?: string | null
+          description?: string
+          id?: string
+          incident_type?: string
+          metadata?: Json | null
+          resolution_notes?: string | null
+          resolved_at?: string | null
+          severity?: string
+          status?: string | null
+        }
+        Relationships: []
+      }
       security_threats: {
         Row: {
           clinic_id: string
@@ -910,6 +1051,39 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      system_health_metrics: {
+        Row: {
+          clinic_id: string
+          id: string
+          metric_type: string
+          metric_value: number
+          recorded_at: string | null
+          status: string | null
+          threshold_max: number | null
+          threshold_min: number | null
+        }
+        Insert: {
+          clinic_id: string
+          id?: string
+          metric_type: string
+          metric_value: number
+          recorded_at?: string | null
+          status?: string | null
+          threshold_max?: number | null
+          threshold_min?: number | null
+        }
+        Update: {
+          clinic_id?: string
+          id?: string
+          metric_type?: string
+          metric_value?: number
+          recorded_at?: string | null
+          status?: string | null
+          threshold_max?: number | null
+          threshold_min?: number | null
+        }
+        Relationships: []
       }
       trusted_devices: {
         Row: {
@@ -1056,6 +1230,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      automated_security_scan: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
+      }
       calculate_security_metrics: {
         Args: { p_clinic_id: string }
         Returns: Json
@@ -1080,6 +1258,16 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: undefined
       }
+      comprehensive_production_check: {
+        Args: { p_clinic_id: string }
+        Returns: {
+          category: string
+          check_name: string
+          status: string
+          details: string
+          priority: string
+        }[]
+      }
       create_security_alert: {
         Args: {
           p_clinic_id: string
@@ -1092,6 +1280,10 @@ export type Database = {
       }
       detect_security_threats: {
         Args: Record<PropertyKey, never>
+        Returns: undefined
+      }
+      emergency_lockdown: {
+        Args: { p_reason: string }
         Returns: undefined
       }
       emergency_revoke_access: {
@@ -1186,6 +1378,10 @@ export type Database = {
       }
       validate_pms_credential_access: {
         Args: { p_office_id: string; p_purpose: string }
+        Returns: boolean
+      }
+      validate_pms_critical_access: {
+        Args: { p_office_id: string }
         Returns: boolean
       }
       validate_production_readiness: {
