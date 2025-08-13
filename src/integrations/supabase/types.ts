@@ -444,6 +444,42 @@ export type Database = {
         }
         Relationships: []
       }
+      data_encryption_log: {
+        Row: {
+          clinic_id: string
+          column_name: string
+          encrypted_at: string
+          encrypted_by: string
+          encryption_type: string
+          id: string
+          key_version: number | null
+          metadata: Json | null
+          table_name: string
+        }
+        Insert: {
+          clinic_id: string
+          column_name: string
+          encrypted_at?: string
+          encrypted_by: string
+          encryption_type?: string
+          id?: string
+          key_version?: number | null
+          metadata?: Json | null
+          table_name: string
+        }
+        Update: {
+          clinic_id?: string
+          column_name?: string
+          encrypted_at?: string
+          encrypted_by?: string
+          encryption_type?: string
+          id?: string
+          key_version?: number | null
+          metadata?: Json | null
+          table_name?: string
+        }
+        Relationships: []
+      }
       enhanced_security_audit_log: {
         Row: {
           action_type: string
@@ -950,6 +986,60 @@ export type Database = {
         }
         Relationships: []
       }
+      secure_sessions: {
+        Row: {
+          clinic_id: string
+          created_at: string
+          device_fingerprint: string | null
+          expires_at: string
+          id: string
+          ip_address: unknown | null
+          is_active: boolean | null
+          last_activity: string | null
+          mfa_verified: boolean | null
+          revoked_at: string | null
+          revoked_reason: string | null
+          risk_score: number | null
+          session_token: string
+          user_agent: string | null
+          user_id: string
+        }
+        Insert: {
+          clinic_id: string
+          created_at?: string
+          device_fingerprint?: string | null
+          expires_at: string
+          id?: string
+          ip_address?: unknown | null
+          is_active?: boolean | null
+          last_activity?: string | null
+          mfa_verified?: boolean | null
+          revoked_at?: string | null
+          revoked_reason?: string | null
+          risk_score?: number | null
+          session_token: string
+          user_agent?: string | null
+          user_id: string
+        }
+        Update: {
+          clinic_id?: string
+          created_at?: string
+          device_fingerprint?: string | null
+          expires_at?: string
+          id?: string
+          ip_address?: unknown | null
+          is_active?: boolean | null
+          last_activity?: string | null
+          mfa_verified?: boolean | null
+          revoked_at?: string | null
+          revoked_reason?: string | null
+          risk_score?: number | null
+          session_token?: string
+          user_agent?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       security_alerts: {
         Row: {
           alert_type: string
@@ -986,6 +1076,57 @@ export type Database = {
           resolved_at?: string | null
           resolved_by?: string | null
           severity?: string
+        }
+        Relationships: []
+      }
+      security_audit_events: {
+        Row: {
+          clinic_id: string
+          created_at: string
+          event_category: string
+          event_type: string
+          id: string
+          ip_address: unknown | null
+          metadata: Json
+          requires_investigation: boolean | null
+          resource_id: string | null
+          resource_type: string | null
+          risk_level: string
+          session_id: string | null
+          user_agent: string | null
+          user_id: string | null
+        }
+        Insert: {
+          clinic_id: string
+          created_at?: string
+          event_category?: string
+          event_type: string
+          id?: string
+          ip_address?: unknown | null
+          metadata?: Json
+          requires_investigation?: boolean | null
+          resource_id?: string | null
+          resource_type?: string | null
+          risk_level?: string
+          session_id?: string | null
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          clinic_id?: string
+          created_at?: string
+          event_category?: string
+          event_type?: string
+          id?: string
+          ip_address?: unknown | null
+          metadata?: Json
+          requires_investigation?: boolean | null
+          resource_id?: string | null
+          resource_type?: string | null
+          risk_level?: string
+          session_id?: string | null
+          user_agent?: string | null
+          user_id?: string | null
         }
         Relationships: []
       }
@@ -1494,6 +1635,14 @@ export type Database = {
         Args: { p_clinic_name: string; p_invite_code?: string }
         Returns: string
       }
+      create_secure_session: {
+        Args: {
+          p_device_fingerprint?: string
+          p_ip_address?: unknown
+          p_user_agent?: string
+        }
+        Returns: string
+      }
       create_security_alert: {
         Args: {
           p_clinic_id: string
@@ -1570,6 +1719,17 @@ export type Database = {
           p_action_type: string
           p_resource_type: string
           p_resource_id?: string
+          p_metadata?: Json
+        }
+        Returns: undefined
+      }
+      log_security_event: {
+        Args: {
+          p_event_type: string
+          p_event_category?: string
+          p_resource_type?: string
+          p_resource_id?: string
+          p_risk_level?: string
           p_metadata?: Json
         }
         Returns: undefined
@@ -1661,6 +1821,10 @@ export type Database = {
           status: string
           details: string
         }[]
+      }
+      validate_secure_session: {
+        Args: { p_session_token: string }
+        Returns: boolean
       }
       validate_security_compliance: {
         Args: Record<PropertyKey, never>

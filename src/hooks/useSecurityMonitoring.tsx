@@ -271,11 +271,37 @@ export const useSecurityMonitoring = () => {
     setConfig(prev => ({ ...prev, ...newConfig }));
   }, []);
 
+  // Log security events
+  const logSecurityEvent = useCallback(async (
+    eventType: string,
+    eventCategory: string = 'access',
+    resourceType?: string,
+    resourceId?: string,
+    riskLevel: string = 'normal',
+    metadata: any = {}
+  ) => {
+    try {
+      const { error } = await supabase.rpc('log_security_event', {
+        p_event_type: eventType,
+        p_event_category: eventCategory,
+        p_resource_type: resourceType,
+        p_resource_id: resourceId,
+        p_risk_level: riskLevel,
+        p_metadata: metadata
+      });
+
+      if (error) throw error;
+    } catch (error) {
+      console.error('Error logging security event:', error);
+    }
+  }, []);
+
   return {
     anomalies,
     config,
     updateConfig,
     detectAnomalies,
-    generateComplianceReport
+    generateComplianceReport,
+    logSecurityEvent
   };
 };
