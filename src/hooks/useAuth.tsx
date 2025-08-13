@@ -29,6 +29,8 @@ interface AuthContextType {
   loading: boolean;
   error: string | null;
   signIn: (email: string) => Promise<{ error?: string }>;
+  signInWithPassword: (email: string, password: string) => Promise<{ error?: string }>;
+  signUp: (email: string, password: string, metadata?: any) => Promise<{ error?: string }>;
   signOut: () => Promise<void>;
   clearError: () => void;
 }
@@ -193,6 +195,54 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const signInWithPassword = async (email: string, password: string): Promise<{ error?: string }> => {
+    try {
+      setError(null);
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      
+      if (error) {
+        const errorMessage = error.message || 'Failed to sign in with password';
+        setError(errorMessage);
+        return { error: errorMessage };
+      }
+      
+      return {};
+    } catch (err) {
+      const errorMessage = 'Network error. Please check your connection and try again.';
+      setError(errorMessage);
+      return { error: errorMessage };
+    }
+  };
+
+  const signUp = async (email: string, password: string, metadata?: any): Promise<{ error?: string }> => {
+    try {
+      setError(null);
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: `${window.location.origin}/`,
+          data: metadata,
+        },
+      });
+      
+      if (error) {
+        const errorMessage = error.message || 'Failed to create account';
+        setError(errorMessage);
+        return { error: errorMessage };
+      }
+      
+      return {};
+    } catch (err) {
+      const errorMessage = 'Network error. Please check your connection and try again.';
+      setError(errorMessage);
+      return { error: errorMessage };
+    }
+  };
+
   const signOut = async () => {
     try {
       setError(null);
@@ -216,6 +266,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       loading, 
       error, 
       signIn, 
+      signInWithPassword,
+      signUp,
       signOut, 
       clearError 
     }}>
