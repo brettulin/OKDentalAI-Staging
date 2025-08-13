@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useSecurityAudit } from '@/hooks/useSecurityAudit';
 import { useEnhancedPatientSecurity } from '@/hooks/useEnhancedPatientSecurity';
+import { useStaffAuthorization } from '@/hooks/useStaffAuthorization';
 import { supabase } from '@/integrations/supabase/client';
 import { encryptPatientField, decryptPatientField, maskSensitiveData } from '@/utils/encryption';
 
@@ -28,6 +29,7 @@ export const useSecurePatientData = () => {
   const { profile } = useAuth();
   const { logAccess } = useSecurityAudit();
   const { validatePatientAccess, logPatientAccess: enhancedLogPatientAccess } = useEnhancedPatientSecurity();
+  const { validateStaffAuthorization } = useStaffAuthorization();
   const [patients, setPatients] = useState<SecurePatientData[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -106,6 +108,17 @@ export const useSecurePatientData = () => {
     if (!profile?.clinic_id) return null;
 
     try {
+      // Enhanced authorization check
+      const authResult = await validateStaffAuthorization({
+        resourceId: patientId,
+        resourceType: 'patient',
+        operation: 'view_details'
+      });
+
+      if (!authResult.authorized) {
+        throw new Error(authResult.reason || 'Access denied');
+      }
+
       // Enhanced patient access validation
       const hasAccess = await validatePatientAccess(patientId, 'view_details');
       if (!hasAccess) {

@@ -6,10 +6,11 @@ import { EmptyState } from '@/components/EmptyState';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { CallSimulator } from '@/components/ai/CallSimulator';
 import { PatientLookup } from '@/components/patients/PatientLookup';
+import { SecurityMonitor } from '@/components/security/SecurityMonitor';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { Bot, Users, Calendar, Settings } from 'lucide-react';
+import { Bot, Users, Calendar, Settings, Shield } from 'lucide-react';
 
 export default function Index() {
   const { user } = useAuth();
@@ -84,7 +85,7 @@ export default function Index() {
         </div>
 
         <Tabs defaultValue="ai-chat" className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="ai-chat" className="flex items-center gap-2">
               <Bot className="h-4 w-4" />
               AI Chat
@@ -96,6 +97,10 @@ export default function Index() {
             <TabsTrigger value="dashboard" className="flex items-center gap-2">
               <Calendar className="h-4 w-4" />
               Dashboard
+            </TabsTrigger>
+            <TabsTrigger value="security" className="flex items-center gap-2">
+              <Shield className="h-4 w-4" />
+              Security
             </TabsTrigger>
           </TabsList>
 
@@ -178,6 +183,10 @@ export default function Index() {
                 </CardContent>
               </Card>
             </div>
+          </TabsContent>
+
+          <TabsContent value="security" className="space-y-6">
+            <SecurityMonitor />
           </TabsContent>
         </Tabs>
       </div>

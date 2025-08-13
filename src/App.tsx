@@ -1,6 +1,7 @@
 import React, { Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Index from '@/pages/Index';
+import Auth from '@/pages/Auth';
 import Patients from '@/pages/patients/PatientsList';
 import PatientDetails from '@/pages/patients/PatientDetails';
 import PatientForm from '@/pages/patients/PatientForm';
@@ -15,44 +16,176 @@ import AISettings from '@/pages/settings/AISettings';
 import QA from '@/pages/QA';
 import NotFound from '@/pages/NotFound';
 import { Layout } from '@/components/Layout';
-import { AuthProvider } from '@/hooks/useAuth';
+import { AuthProvider, useAuth } from '@/hooks/useAuth';
 import { SecurityProvider } from '@/components/security/SecurityProvider';
 import { SessionTimeout } from '@/components/security/SessionTimeout';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { PageSkeleton } from '@/components/PageSkeleton';
+
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return <PageSkeleton />;
+  }
+
+  if (!user) {
+    return <Navigate to="/auth" replace />;
+  }
+
+  return <>{children}</>;
+}
+
+function PublicRoute({ children }: { children: React.ReactNode }) {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return <PageSkeleton />;
+  }
+
+  if (user) {
+    return <Navigate to="/" replace />;
+  }
+
+  return <>{children}</>;
+}
 
 function App() {
   return (
     <ErrorBoundary>
       <AuthProvider>
         <SecurityProvider>
-          <SessionTimeout timeoutMinutes={30} warningMinutes={5} />
           <Router>
-            <Layout>
-            <Suspense fallback={<PageSkeleton />}>
-              <Routes>
-                <Route path="/" element={<ErrorBoundary><Index /></ErrorBoundary>} />
-                <Route path="/patients" element={<ErrorBoundary><Patients /></ErrorBoundary>} />
-                <Route path="/patients/new" element={<ErrorBoundary><PatientForm /></ErrorBoundary>} />
-                <Route path="/patients/:id" element={<ErrorBoundary><PatientDetails /></ErrorBoundary>} />
-                <Route path="/patients/:id/edit" element={<ErrorBoundary><PatientForm /></ErrorBoundary>} />
-                <Route path="/appointments" element={<ErrorBoundary><Appointments /></ErrorBoundary>} />
-                <Route path="/appointments/schedule" element={<ErrorBoundary><Schedule /></ErrorBoundary>} />
-                <Route path="/calls" element={<ErrorBoundary><Calls /></ErrorBoundary>} />
-                <Route path="/calls/:id" element={<ErrorBoundary><CallDetails /></ErrorBoundary>} />
-                <Route path="/calls/export" element={<ErrorBoundary><CallsExport /></ErrorBoundary>} />
-                <Route path="/settings" element={<ErrorBoundary><Settings /></ErrorBoundary>} />
-                <Route path="/settings/ai" element={<ErrorBoundary><AISettings /></ErrorBoundary>} />
-                <Route path="/pms" element={<ErrorBoundary><PMS /></ErrorBoundary>} />
-                <Route path="/qa" element={<ErrorBoundary><QA /></ErrorBoundary>} />
-                <Route path="*" element={<Navigate to="/" replace />} />
-              </Routes>
-            </Suspense>
-          </Layout>
-        </Router>
-      </SecurityProvider>
-    </AuthProvider>
-  </ErrorBoundary>
+            <Routes>
+              <Route 
+                path="/auth" 
+                element={
+                  <PublicRoute>
+                    <Auth />
+                  </PublicRoute>
+                } 
+              />
+              <Route 
+                path="/" 
+                element={
+                  <ProtectedRoute>
+                    <Layout>
+                      <SessionTimeout timeoutMinutes={30} warningMinutes={5} />
+                      <Index />
+                    </Layout>
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/patients" 
+                element={
+                  <ProtectedRoute>
+                    <Layout><Patients /></Layout>
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/patients/new" 
+                element={
+                  <ProtectedRoute>
+                    <Layout><PatientForm /></Layout>
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/patients/:id" 
+                element={
+                  <ProtectedRoute>
+                    <Layout><PatientDetails /></Layout>
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/patients/:id/edit" 
+                element={
+                  <ProtectedRoute>
+                    <Layout><PatientForm /></Layout>
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/appointments" 
+                element={
+                  <ProtectedRoute>
+                    <Layout><Appointments /></Layout>
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/appointments/schedule" 
+                element={
+                  <ProtectedRoute>
+                    <Layout><Schedule /></Layout>
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/calls" 
+                element={
+                  <ProtectedRoute>
+                    <Layout><Calls /></Layout>
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/calls/:id" 
+                element={
+                  <ProtectedRoute>
+                    <Layout><CallDetails /></Layout>
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/calls/export" 
+                element={
+                  <ProtectedRoute>
+                    <Layout><CallsExport /></Layout>
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/settings" 
+                element={
+                  <ProtectedRoute>
+                    <Layout><Settings /></Layout>
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/settings/ai" 
+                element={
+                  <ProtectedRoute>
+                    <Layout><AISettings /></Layout>
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/pms" 
+                element={
+                  <ProtectedRoute>
+                    <Layout><PMS /></Layout>
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/qa" 
+                element={
+                  <ProtectedRoute>
+                    <Layout><QA /></Layout>
+                  </ProtectedRoute>
+                } 
+              />
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </Router>
+        </SecurityProvider>
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }
 
