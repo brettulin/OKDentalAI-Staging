@@ -30,6 +30,14 @@ import {
   CareStackErrorResponse,
   AppointmentStatusExternalModel,
   ProcedureCodeBasicApiResponseModel,
+  ProductionTypeDetailsModel,
+  AppointmentCancelModel,
+  AppointmentModifyStatusModel,
+  PagedResultsOfPatientViewModel,
+  PagedResultsOfAppointmentSyncModel,
+  PagedResultsOfTreatmentProcedureSyncModel,
+  AppointmentSyncModel,
+  TreatmentProcedureSyncModel,
   // Backward compatibility aliases
   CareStackPatient,
   CareStackLocation,
@@ -683,6 +691,222 @@ export class CareStackAdapter implements PMSInterface {
     } catch (error) {
       console.error('Error getting procedure codes:', error)
       throw error
+    }
+  }
+
+  // Sync API endpoints
+  async syncPatients(modifiedSince: string, continueToken?: string): Promise<PagedResultsOfPatientViewModel> {
+    if (this.useMockMode) {
+      await addArtificialLatency()
+      const allPatients = Array.from(mockStorage.patients.values())
+      const modifiedDate = new Date(modifiedSince)
+      
+      const filteredPatients = allPatients.filter(patient => {
+        const patientModified = patient.updatedAt ? new Date(patient.updatedAt) : new Date()
+        return patientModified >= modifiedDate
+      })
+
+      return {
+        items: filteredPatients.slice(0, 50), // Mock pagination
+        continueToken: filteredPatients.length > 50 ? 'mock_token_' + Date.now() : undefined,
+        totalCount: filteredPatients.length,
+        hasMore: filteredPatients.length > 50
+      }
+    }
+
+    try {
+      const params = new URLSearchParams({ modifiedSince })
+      if (continueToken) params.append('continueToken', continueToken)
+      
+      return await this.makeRequest<PagedResultsOfPatientViewModel>(`/api/v1.0/sync/patients?${params}`)
+    } catch (error) {
+      console.error('Error syncing patients:', error)
+      throw error
+    }
+  }
+
+  async syncAppointments(modifiedSince: string, continueToken?: string): Promise<PagedResultsOfAppointmentSyncModel> {
+    if (this.useMockMode) {
+      await addArtificialLatency()
+      const allAppointments = Array.from(mockStorage.appointments.values())
+      const modifiedDate = new Date(modifiedSince)
+      
+      const syncModels: AppointmentSyncModel[] = allAppointments
+        .filter(apt => new Date(apt.updatedAt) >= modifiedDate)
+        .map(apt => ({
+          id: parseInt(apt.id),
+          patientId: parseInt(apt.patientId),
+          providerId: parseInt(apt.providerId),
+          locationId: parseInt(apt.locationId),
+          startTime: apt.start,
+          endTime: apt.end,
+          status: apt.status,
+          modifiedDate: apt.updatedAt
+        }))
+
+      return {
+        items: syncModels.slice(0, 50),
+        continueToken: syncModels.length > 50 ? 'mock_token_' + Date.now() : undefined,
+        totalCount: syncModels.length,
+        hasMore: syncModels.length > 50
+      }
+    }
+
+    try {
+      const params = new URLSearchParams({ modifiedSince })
+      if (continueToken) params.append('continueToken', continueToken)
+      
+      return await this.makeRequest<PagedResultsOfAppointmentSyncModel>(`/api/v1.0/sync/appointments?${params}`)
+    } catch (error) {
+      console.error('Error syncing appointments:', error)
+      throw error
+    }
+  }
+
+  async syncTreatmentProcedures(modifiedSince: string, continueToken?: string, includeDeleted = false): Promise<PagedResultsOfTreatmentProcedureSyncModel> {
+    if (this.useMockMode) {
+      await addArtificialLatency()
+      // Mock treatment procedures data
+      const mockTreatments: TreatmentProcedureSyncModel[] = [
+        {
+          id: 1,
+          appointmentId: 1,
+          patientId: 1,
+          procedureCodeId: 1,
+          status: 'completed',
+          modifiedDate: new Date().toISOString(),
+          amount: 150,
+          notes: 'Routine cleaning completed'
+        }
+      ]
+
+      return {
+        items: mockTreatments,
+        continueToken: undefined,
+        totalCount: mockTreatments.length,
+        hasMore: false
+      }
+    }
+
+    try {
+      const params = new URLSearchParams({ 
+        modifiedSince,
+        includeDeleted: includeDeleted.toString()
+      })
+      if (continueToken) params.append('continueToken', continueToken)
+      
+      return await this.makeRequest<PagedResultsOfTreatmentProcedureSyncModel>(`/api/v1.0/sync/treatment-procedures?${params}`)
+    } catch (error) {
+      console.error('Error syncing treatment procedures:', error)
+      throw error
+    }
+  }
+
+  // Treatment and procedure endpoints
+  async getAppointmentProcedures(appointmentId: number): Promise<number[]> {
+    if (this.useMockMode) {
+      await addArtificialLatency()
+      return [1, 2, 3] // Mock procedure code IDs
+    }
+
+    try {
+      return await this.makeRequest<number[]>(`/api/v1.0/treatments/appointment-procedures/${appointmentId}`)
+    } catch (error) {
+      console.error('Error getting appointment procedures:', error)
+      throw error
+    }
+  }
+
+  async getProductionTypes(): Promise<ProductionTypeDetailsModel[]> {
+    if (this.useMockMode) {
+      await addArtificialLatency()
+      return [
+        { id: 1, name: 'Preventive', description: 'Preventive care procedures', isActive: true },
+        { id: 2, name: 'Restorative', description: 'Restorative dental procedures', isActive: true },
+        { id: 3, name: 'Cosmetic', description: 'Cosmetic dental procedures', isActive: true }
+      ]
+    }
+
+    try {
+      return await this.makeRequest<ProductionTypeDetailsModel[]>('/api/v1.0/production-types')
+    } catch (error) {
+      console.error('Error getting production types:', error)
+      throw error
+    }
+  }
+
+  // Enhanced appointment management
+  async checkoutAppointment(appointmentId: number, overrideCareNoteValidation = true): Promise<boolean> {
+    if (this.useMockMode) {
+      await addArtificialLatency()
+      const appointment = mockStorage.appointments.get(appointmentId.toString())
+      if (appointment) {
+        appointment.status = 'completed'
+        return true
+      }
+      return false
+    }
+
+    try {
+      const params = new URLSearchParams({ 
+        overrideCareNoteValidation: overrideCareNoteValidation.toString() 
+      })
+      
+      await this.makeRequest(`/api/v1.0/appointments/${appointmentId}/checkout?${params}`, {
+        method: 'PUT'
+      })
+      return true
+    } catch (error) {
+      console.error('Error checking out appointment:', error)
+      return false
+    }
+  }
+
+  async modifyAppointmentStatus(appointmentId: number, statusData: AppointmentModifyStatusModel): Promise<boolean> {
+    if (this.useMockMode) {
+      await addArtificialLatency()
+      const appointment = mockStorage.appointments.get(appointmentId.toString())
+      if (appointment) {
+        appointment.status = statusData.status
+        if (statusData.notes) appointment.notes = statusData.notes
+        return true
+      }
+      return false
+    }
+
+    try {
+      await this.makeRequest(`/api/v1.0/appointments/${appointmentId}/modify-status`, {
+        method: 'PUT',
+        body: JSON.stringify(statusData)
+      })
+      return true
+    } catch (error) {
+      console.error('Error modifying appointment status:', error)
+      return false
+    }
+  }
+
+  async cancelAppointmentWithDetails(appointmentId: number, cancelData: AppointmentCancelModel): Promise<boolean> {
+    if (this.useMockMode) {
+      await addArtificialLatency()
+      const appointment = mockStorage.appointments.get(appointmentId.toString())
+      if (appointment) {
+        appointment.status = 'cancelled'
+        appointment.notes = (appointment.notes || '') + ` | Cancelled: ${cancelData.reason}`
+        return true
+      }
+      return false
+    }
+
+    try {
+      await this.makeRequest(`/api/v1.0/appointments/${appointmentId}/cancel`, {
+        method: 'PUT',
+        body: JSON.stringify(cancelData)
+      })
+      return true
+    } catch (error) {
+      console.error('Error cancelling appointment with details:', error)
+      return false
     }
   }
 }

@@ -211,6 +211,69 @@ export interface ProcedureCodeBasicApiResponseModel {
   fee?: number
 }
 
+export interface ProductionTypeDetailsModel {
+  id: number
+  name: string
+  description?: string
+  isActive: boolean
+}
+
+export interface AppointmentCancelModel {
+  reason: string
+  notifyPatient?: boolean
+}
+
+export interface AppointmentModifyStatusModel {
+  status: 'scheduled' | 'confirmed' | 'arrived' | 'in_progress' | 'completed' | 'cancelled' | 'no_show'
+  notes?: string
+}
+
+// Sync API types
+export interface PagedResultsOfPatientViewModel {
+  items: PatientViewModel[]
+  continueToken?: string
+  totalCount: number
+  hasMore: boolean
+}
+
+export interface PagedResultsOfAppointmentSyncModel {
+  items: AppointmentSyncModel[]
+  continueToken?: string
+  totalCount: number
+  hasMore: boolean
+}
+
+export interface PagedResultsOfTreatmentProcedureSyncModel {
+  items: TreatmentProcedureSyncModel[]
+  continueToken?: string
+  totalCount: number
+  hasMore: boolean
+}
+
+export interface AppointmentSyncModel {
+  id: number
+  patientId: number
+  providerId: number
+  locationId: number
+  startTime: string
+  endTime: string
+  status: string
+  modifiedDate: string
+  isDeleted?: boolean
+}
+
+export interface TreatmentProcedureSyncModel {
+  id: number
+  appointmentId: number
+  patientId: number
+  procedureCodeId: number
+  status: string
+  modifiedDate: string
+  isDeleted?: boolean
+  amount?: number
+  notes?: string
+}
+
 export interface CareStackErrorResponse {
   error: string
   message: string
