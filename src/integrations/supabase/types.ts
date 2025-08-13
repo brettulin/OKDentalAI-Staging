@@ -924,6 +924,10 @@ export type Database = {
           details: string
         }[]
       }
+      validate_session_integrity: {
+        Args: Record<PropertyKey, never>
+        Returns: boolean
+      }
     }
     Enums: {
       admin_role_type: "technical_admin" | "medical_admin" | "clinic_admin"
