@@ -1,18 +1,25 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import { useCallTranscriptSecurity } from '@/hooks/useCallTranscriptSecurity';
+import { useStaffAuthorization } from '@/hooks/useStaffAuthorization';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { ArrowLeft, Phone, Clock, User, Bot, PhoneOff } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { ArrowLeft, Phone, Clock, User, Bot, PhoneOff, Shield, AlertTriangle, Download } from 'lucide-react';
 import { formatDistanceToNow, format } from 'date-fns';
 import { PageSkeleton } from '@/components/PageSkeleton';
 
 const CallDetailsPage = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [accessGranted, setAccessGranted] = useState<boolean | null>(null);
+  const [accessError, setAccessError] = useState<string | null>(null);
+  const { validateCallAccess, logCallAccess } = useCallTranscriptSecurity();
+  const { validateStaffAuthorization } = useStaffAuthorization();
 
   const { data: call, isLoading, error } = useQuery({
     queryKey: ['call-details', id],
@@ -32,6 +39,96 @@ const CallDetailsPage = () => {
     },
     enabled: !!id,
   });
+
+  // Validate access when component loads
+  useEffect(() => {
+    const validateAccess = async () => {
+      if (!call || !id) return;
+
+      try {
+        // Enhanced authorization check
+        const authResult = await validateStaffAuthorization({
+          resourceId: id,
+          resourceType: 'call',
+          operation: 'view_details'
+        });
+
+        if (!authResult.authorized) {
+          setAccessError(authResult.reason || 'Access denied');
+          setAccessGranted(false);
+          return;
+        }
+
+        // Call transcript specific validation
+        const hasAccess = await validateCallAccess(id, 'view');
+        setAccessGranted(hasAccess);
+
+        if (hasAccess) {
+          // Log the detailed access
+          await logCallAccess({
+            callId: id,
+            operation: 'view',
+            metadata: { page_access: true }
+          });
+        } else {
+          setAccessError('You do not have permission to view this call details');
+        }
+      } catch (error) {
+        console.error('Access validation failed:', error);
+        setAccessError('Access validation failed');
+        setAccessGranted(false);
+      }
+    };
+
+    validateAccess();
+  }, [call, id, validateCallAccess, logCallAccess, validateStaffAuthorization]);
+
+  // Handle export with enhanced security
+  const handleExport = async () => {
+    if (!call || !id) return;
+
+    try {
+      // Validate export permission
+      const hasAccess = await validateCallAccess(id, 'export');
+      if (!hasAccess) {
+        setAccessError('You do not have permission to export this call transcript');
+        return;
+      }
+
+      // Log export action
+      await logCallAccess({
+        callId: id,
+        operation: 'export',
+        metadata: { export_format: 'json', source: 'call_details_page' }
+      });
+
+      // Create and download export
+      const exportData = {
+        call_id: call.id,
+        started_at: call.started_at,
+        ended_at: call.ended_at,
+        outcome: call.outcome,
+        turns: call.turns || [],
+        exported_at: new Date().toISOString(),
+        exported_by: 'authorized_user'
+      };
+
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], {
+        type: 'application/json'
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `call_${call.id.slice(-8)}_transcript.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Export failed:', error);
+      setAccessError('Failed to export call transcript');
+    }
+  };
 
   if (isLoading) {
     return <PageSkeleton />;
@@ -77,22 +174,65 @@ const CallDetailsPage = () => {
     }
   };
 
+  if (accessGranted === false) {
+    return (
+      <div className="p-6">
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription>
+            <div className="space-y-2">
+              <div className="font-medium">Access Denied</div>
+              <div>{accessError}</div>
+              <Button onClick={() => navigate('/calls')} variant="outline">
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Back to Calls
+              </Button>
+            </div>
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
+
   return (
     <div className="p-6">
+      {accessError && (
+        <Alert variant="destructive" className="mb-4">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription>
+            <div className="flex items-center justify-between">
+              <span>{accessError}</span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setAccessError(null)}
+              >
+                Dismiss
+              </Button>
+            </div>
+          </AlertDescription>
+        </Alert>
+      )}
+
       <div className="flex items-center gap-4 mb-6">
         <Button variant="outline" onClick={() => navigate('/calls')}>
           <ArrowLeft className="h-4 w-4 mr-2" />
           Back to Calls
         </Button>
-        <div>
+        <div className="flex-1">
           <h1 className="text-2xl font-semibold flex items-center gap-2">
             <Phone className="h-6 w-6" />
             Call #{call.id.slice(-8)}
+            {accessGranted && <span title="Secure access validated"><Shield className="h-5 w-5 text-green-600" /></span>}
           </h1>
           <p className="text-muted-foreground">
             Detailed call transcript and information
           </p>
         </div>
+        <Button onClick={handleExport} variant="outline" className="gap-2">
+          <Download className="h-4 w-4" />
+          Export Transcript
+        </Button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

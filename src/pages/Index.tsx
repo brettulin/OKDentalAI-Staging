@@ -7,6 +7,7 @@ import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { CallSimulator } from '@/components/ai/CallSimulator';
 import { PatientLookup } from '@/components/patients/PatientLookup';
 import { SecurityMonitor } from '@/components/security/SecurityMonitor';
+import { SecurityComplianceDashboard } from '@/components/security/SecurityComplianceDashboard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
@@ -186,7 +187,7 @@ export default function Index() {
           </TabsContent>
 
           <TabsContent value="security" className="space-y-6">
-            <SecurityMonitor />
+            <SecurityComplianceDashboard />
           </TabsContent>
         </Tabs>
       </div>
