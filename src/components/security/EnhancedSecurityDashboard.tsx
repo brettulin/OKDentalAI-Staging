@@ -1,338 +1,293 @@
-import React, { useState, useEffect } from 'react';
-import { useAuth } from '@/hooks/useAuth';
-import { supabase } from '@/integrations/supabase/client';
+import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
+import { useEnhancedSecurity } from '@/hooks/useEnhancedSecurity';
+import { useAuth } from '@/hooks/useAuth';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 import { 
   Shield, 
   AlertTriangle, 
   CheckCircle, 
   Clock, 
   TrendingUp,
-  Users,
-  Database,
+  Activity,
   Lock
 } from 'lucide-react';
 
-interface SecurityMetric {
-  name: string;
-  value: number;
-  target: number;
-  status: 'good' | 'warning' | 'critical';
-  trend: 'up' | 'down' | 'stable';
-}
-
-interface SecurityIncident {
-  id: string;
-  type: string;
-  severity: 'low' | 'medium' | 'high' | 'critical';
-  description: string;
-  created_at: string;
-  resolved: boolean;
-}
-
-export const EnhancedSecurityDashboard: React.FC = () => {
+export function EnhancedSecurityDashboard() {
   const { profile } = useAuth();
-  const [metrics, setMetrics] = useState<SecurityMetric[]>([]);
-  const [incidents, setIncidents] = useState<SecurityIncident[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const { securityMetrics, refreshSecurityMetrics } = useEnhancedSecurity();
 
-  useEffect(() => {
-    if (!profile?.clinic_id) return;
+  // Fetch recent security alerts
+  const { data: recentAlerts } = useQuery({
+    queryKey: ['security-alerts', profile?.clinic_id],
+    queryFn: async () => {
+      if (!profile?.clinic_id) return [];
+      
+      const { data, error } = await supabase
+        .from('security_alerts')
+        .select('*')
+        .eq('clinic_id', profile.clinic_id)
+        .eq('resolved', false)
+        .order('created_at', { ascending: false })
+        .limit(10);
+      
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!profile?.clinic_id,
+    refetchInterval: 30 * 1000 // Refresh every 30 seconds
+  });
 
-    const fetchSecurityData = async () => {
-      try {
-        setIsLoading(true);
+  // Fetch security audit summary
+  const { data: auditSummary } = useQuery({
+    queryKey: ['security-audit-summary', profile?.clinic_id],
+    queryFn: async () => {
+      if (!profile?.clinic_id) return null;
+      
+      const { data, error } = await supabase
+        .from('enhanced_security_audit_log')
+        .select('risk_level, created_at')
+        .eq('clinic_id', profile.clinic_id)
+        .gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
+      
+      if (error) throw error;
+      
+      const summary = {
+        total: data?.length || 0,
+        critical: data?.filter(log => log.risk_level === 'critical').length || 0,
+        high: data?.filter(log => log.risk_level === 'high').length || 0,
+        elevated: data?.filter(log => log.risk_level === 'elevated').length || 0,
+        normal: data?.filter(log => log.risk_level === 'normal').length || 0
+      };
+      
+      return summary;
+    },
+    enabled: !!profile?.clinic_id,
+    refetchInterval: 60 * 1000 // Refresh every minute
+  });
 
-        // Fetch security metrics
-        const [
-          auditLogsResponse,
-          securityAlertsResponse,
-          activeUsersResponse,
-          patientAccessResponse
-        ] = await Promise.all([
-          supabase
-            .from('security_audit_log')
-            .select('*')
-            .eq('clinic_id', profile.clinic_id)
-            .gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()),
-
-          supabase
-            .from('security_alerts')
-            .select('*')
-            .eq('clinic_id', profile.clinic_id)
-            .eq('resolved', false),
-
-          supabase
-            .from('profiles')
-            .select('user_id')
-            .eq('clinic_id', profile.clinic_id),
-
-          supabase
-            .from('security_audit_log')
-            .select('*')
-            .eq('clinic_id', profile.clinic_id)
-            .eq('resource_type', 'patient')
-            .gte('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString())
-        ]);
-
-        // Calculate security metrics
-        const auditLogs = auditLogsResponse.data || [];
-        const securityAlerts = securityAlertsResponse.data || [];
-        const activeUsers = activeUsersResponse.data || [];
-        const patientAccess = patientAccessResponse.data || [];
-
-        const calculatedMetrics: SecurityMetric[] = [
-          {
-            name: 'Security Score',
-            value: Math.max(0, 100 - (securityAlerts.length * 10)),
-            target: 90,
-            status: securityAlerts.length === 0 ? 'good' : securityAlerts.length < 3 ? 'warning' : 'critical',
-            trend: 'stable'
-          },
-          {
-            name: 'Failed Access Attempts',
-            value: auditLogs.filter(log => log.action_type.includes('denied')).length,
-            target: 5,
-            status: auditLogs.filter(log => log.action_type.includes('denied')).length <= 5 ? 'good' : 'warning',
-            trend: 'down'
-          },
-          {
-            name: 'Patient Data Access',
-            value: patientAccess.length,
-            target: 50,
-            status: patientAccess.length <= 50 ? 'good' : patientAccess.length <= 100 ? 'warning' : 'critical',
-            trend: 'stable'
-          },
-          {
-            name: 'Active Users',
-            value: activeUsers.length,
-            target: 10,
-            status: 'good',
-            trend: 'up'
-          }
-        ];
-
-        setMetrics(calculatedMetrics);
-        setIncidents(securityAlerts.map(alert => ({
-          id: alert.id,
-          type: alert.alert_type,
-          severity: alert.severity as any,
-          description: alert.description,
-          created_at: alert.created_at,
-          resolved: alert.resolved
-        })));
-
-      } catch (error) {
-        console.error('Failed to fetch security data:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchSecurityData();
-
-    // Set up real-time updates
-    const subscription = supabase
-      .channel('security_updates')
-      .on('postgres_changes', {
-        event: '*',
-        schema: 'public',
-        table: 'security_alerts',
-        filter: `clinic_id=eq.${profile.clinic_id}`
-      }, () => {
-        fetchSecurityData();
-      })
-      .subscribe();
-
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, [profile?.clinic_id]);
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'good': return 'text-green-600';
-      case 'warning': return 'text-yellow-600';
-      case 'critical': return 'text-red-600';
-      default: return 'text-gray-600';
+  const getSecurityLevelBadge = (level: string) => {
+    switch (level) {
+      case 'critical':
+        return (
+          <Badge variant="destructive" className="flex items-center gap-1">
+            <AlertTriangle className="h-3 w-3" />
+            Critical
+          </Badge>
+        );
+      case 'elevated':
+        return (
+          <Badge variant="secondary" className="flex items-center gap-1">
+            <Clock className="h-3 w-3" />
+            Elevated
+          </Badge>
+        );
+      default:
+        return (
+          <Badge variant="default" className="flex items-center gap-1">
+            <CheckCircle className="h-3 w-3" />
+            Standard
+          </Badge>
+        );
     }
   };
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'good': return 'success';
-      case 'warning': return 'warning';
-      case 'critical': return 'destructive';
-      default: return 'secondary';
-    }
+  const getSecurityScore = () => {
+    if (!securityMetrics) return 0;
+    
+    let score = 100;
+    score -= securityMetrics.riskScore * 2; // Reduce score based on risk
+    score -= securityMetrics.mfaRequired ? 20 : 0; // Reduce if MFA required but not verified
+    score -= !securityMetrics.sessionValid ? 50 : 0; // Significant reduction for invalid session
+    
+    return Math.max(0, Math.min(100, score));
   };
 
-  const getSeverityColor = (severity: string) => {
-    switch (severity) {
-      case 'low': return 'secondary';
-      case 'medium': return 'warning';
-      case 'high': return 'destructive';
-      case 'critical': return 'destructive';
-      default: return 'secondary';
-    }
+  const getScoreColor = (score: number) => {
+    if (score >= 80) return 'text-green-600';
+    if (score >= 60) return 'text-yellow-600';
+    return 'text-red-600';
   };
-
-  if (isLoading) {
-    return (
-      <Card>
-        <CardContent className="flex items-center justify-center py-8">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
-            <div>Loading security data...</div>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
 
   return (
     <div className="space-y-6">
       {/* Security Overview */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {metrics.map((metric) => (
-          <Card key={metric.name}>
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">
-                    {metric.name}
-                  </p>
-                  <div className="flex items-center gap-2">
-                    <p className={`text-2xl font-bold ${getStatusColor(metric.status)}`}>
-                      {metric.name === 'Security Score' ? `${metric.value}%` : metric.value}
-                    </p>
-                    {metric.trend === 'up' && <TrendingUp className="h-4 w-4 text-green-600" />}
-                  </div>
-                </div>
-                <Badge variant={getStatusBadge(metric.status) as any}>
-                  {metric.status}
-                </Badge>
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-2xl font-bold text-primary">
+                  {getSecurityScore()}
+                </p>
+                <p className="text-sm text-muted-foreground">Security Score</p>
               </div>
-              
-              {metric.name === 'Security Score' && (
-                <div className="mt-2">
-                  <Progress value={metric.value} className="h-2" />
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Target: {metric.target}%
-                  </p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        ))}
+              <Shield className={`h-8 w-8 ${getScoreColor(getSecurityScore())}`} />
+            </div>
+            <Progress value={getSecurityScore()} className="mt-3" />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-2xl font-bold text-primary">
+                  {securityMetrics?.riskScore || 0}
+                </p>
+                <p className="text-sm text-muted-foreground">Risk Score</p>
+              </div>
+              <TrendingUp className="h-8 w-8 text-orange-500" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-2xl font-bold text-primary">
+                  {recentAlerts?.length || 0}
+                </p>
+                <p className="text-sm text-muted-foreground">Active Alerts</p>
+              </div>
+              <AlertTriangle className="h-8 w-8 text-red-500" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-2xl font-bold text-primary">
+                  {auditSummary?.total || 0}
+                </p>
+                <p className="text-sm text-muted-foreground">24h Events</p>
+              </div>
+              <Activity className="h-8 w-8 text-blue-500" />
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
-      {/* Security Incidents */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <AlertTriangle className="h-5 w-5" />
-            Active Security Incidents
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {incidents.length === 0 ? (
-            <div className="text-center py-6">
-              <CheckCircle className="h-12 w-12 text-green-600 mx-auto mb-2" />
-              <div className="text-lg font-medium text-green-600">All Clear</div>
-              <div className="text-sm text-muted-foreground">No active security incidents</div>
+      {/* Security Status Details */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Current Session Status */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Lock className="h-5 w-5" />
+              Session Security
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">Security Level</span>
+              {securityMetrics && getSecurityLevelBadge(securityMetrics.securityLevel)}
             </div>
-          ) : (
+            
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">Session Valid</span>
+              <Badge variant={securityMetrics?.sessionValid ? "default" : "destructive"}>
+                {securityMetrics?.sessionValid ? "Active" : "Invalid"}
+              </Badge>
+            </div>
+            
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">MFA Status</span>
+              <Badge variant={securityMetrics?.mfaRequired ? "secondary" : "default"}>
+                {securityMetrics?.mfaRequired ? "Required" : "Not Required"}
+              </Badge>
+            </div>
+            
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">Last Activity</span>
+              <span className="text-sm text-muted-foreground">
+                {securityMetrics?.lastActivity ? 
+                  new Date(securityMetrics.lastActivity).toLocaleTimeString() : 
+                  'Unknown'
+                }
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Risk Level Breakdown */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5" />
+              Risk Analysis (24h)
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {auditSummary && (
+              <>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">Critical Events</span>
+                  <Badge variant="destructive">{auditSummary.critical}</Badge>
+                </div>
+                
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">High Risk</span>
+                  <Badge variant="secondary">{auditSummary.high}</Badge>
+                </div>
+                
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">Elevated Risk</span>
+                  <Badge variant="outline">{auditSummary.elevated}</Badge>
+                </div>
+                
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">Normal Events</span>
+                  <Badge variant="default">{auditSummary.normal}</Badge>
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Recent Security Alerts */}
+      {recentAlerts && recentAlerts.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5" />
+              Active Security Alerts
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
             <div className="space-y-3">
-              {incidents.map((incident) => (
-                <Alert key={incident.id} variant={getSeverityColor(incident.severity) as any}>
-                  <AlertTriangle className="h-4 w-4" />
-                  <AlertDescription>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="font-medium">{incident.description}</div>
-                        <div className="text-sm opacity-75 flex items-center gap-2 mt-1">
-                          <Clock className="h-3 w-3" />
-                          {new Date(incident.created_at).toLocaleString()}
-                          <span>•</span>
-                          <span>{incident.type}</span>
-                        </div>
-                      </div>
-                      <Badge variant={getSeverityColor(incident.severity) as any}>
-                        {incident.severity}
-                      </Badge>
-                    </div>
-                  </AlertDescription>
-                </Alert>
+              {recentAlerts.slice(0, 5).map((alert) => (
+                <div 
+                  key={alert.id} 
+                  className="flex items-center justify-between p-3 border rounded-lg"
+                >
+                  <div className="flex-1">
+                    <p className="text-sm font-medium">{alert.description}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {new Date(alert.created_at).toLocaleString()}
+                    </p>
+                  </div>
+                  <Badge 
+                    variant={
+                      alert.severity === 'critical' ? 'destructive' :
+                      alert.severity === 'high' ? 'secondary' : 'outline'
+                    }
+                  >
+                    {alert.severity}
+                  </Badge>
+                </div>
               ))}
             </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Security Actions */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm flex items-center gap-2">
-              <Users className="h-4 w-4" />
-              User Access
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              <Button variant="outline" size="sm" className="w-full justify-start">
-                Review User Permissions
-              </Button>
-              <Button variant="outline" size="sm" className="w-full justify-start">
-                Audit User Activity
-              </Button>
-            </div>
           </CardContent>
         </Card>
-
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm flex items-center gap-2">
-              <Database className="h-4 w-4" />
-              Data Protection
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              <Button variant="outline" size="sm" className="w-full justify-start">
-                Patient Data Audit
-              </Button>
-              <Button variant="outline" size="sm" className="w-full justify-start">
-                Export Security Report
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm flex items-center gap-2">
-              <Lock className="h-4 w-4" />
-              System Security
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              <Button variant="outline" size="sm" className="w-full justify-start">
-                Security Configuration
-              </Button>
-              <Button variant="outline" size="sm" className="w-full justify-start">
-                Incident Response
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      )}
     </div>
   );
-};
+}

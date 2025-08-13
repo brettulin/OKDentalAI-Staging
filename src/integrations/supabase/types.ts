@@ -1383,6 +1383,13 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      audit_function_security: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          function_name: string
+          has_secure_search_path: boolean
+        }[]
+      }
       automated_security_scan: {
         Args: Record<PropertyKey, never>
         Returns: undefined
