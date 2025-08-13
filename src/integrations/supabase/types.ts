@@ -115,13 +115,6 @@ export type Database = {
             foreignKeyName: "appointments_office_id_fkey"
             columns: ["office_id"]
             isOneToOne: false
-            referencedRelation: "office_pms_status"
-            referencedColumns: ["office_id"]
-          },
-          {
-            foreignKeyName: "appointments_office_id_fkey"
-            columns: ["office_id"]
-            isOneToOne: false
             referencedRelation: "offices"
             referencedColumns: ["id"]
           },
@@ -282,13 +275,6 @@ export type Database = {
             foreignKeyName: "calls_office_id_fkey"
             columns: ["office_id"]
             isOneToOne: false
-            referencedRelation: "office_pms_status"
-            referencedColumns: ["office_id"]
-          },
-          {
-            foreignKeyName: "calls_office_id_fkey"
-            columns: ["office_id"]
-            isOneToOne: false
             referencedRelation: "offices"
             referencedColumns: ["id"]
           },
@@ -350,6 +336,75 @@ export type Database = {
           main_phone?: string | null
           name?: string
           timezone?: string | null
+        }
+        Relationships: []
+      }
+      compliance_frameworks: {
+        Row: {
+          clinic_id: string
+          compliance_status: string | null
+          created_at: string | null
+          framework_name: string
+          id: string
+          last_assessment: string | null
+          next_assessment: string | null
+          requirements: Json
+          version: string | null
+        }
+        Insert: {
+          clinic_id: string
+          compliance_status?: string | null
+          created_at?: string | null
+          framework_name: string
+          id?: string
+          last_assessment?: string | null
+          next_assessment?: string | null
+          requirements?: Json
+          version?: string | null
+        }
+        Update: {
+          clinic_id?: string
+          compliance_status?: string | null
+          created_at?: string | null
+          framework_name?: string
+          id?: string
+          last_assessment?: string | null
+          next_assessment?: string | null
+          requirements?: Json
+          version?: string | null
+        }
+        Relationships: []
+      }
+      data_classification: {
+        Row: {
+          access_log_required: boolean | null
+          classification_level: string
+          clinic_id: string
+          column_name: string
+          created_at: string | null
+          encryption_required: boolean | null
+          id: string
+          table_name: string
+        }
+        Insert: {
+          access_log_required?: boolean | null
+          classification_level: string
+          clinic_id: string
+          column_name: string
+          created_at?: string | null
+          encryption_required?: boolean | null
+          id?: string
+          table_name: string
+        }
+        Update: {
+          access_log_required?: boolean | null
+          classification_level?: string
+          clinic_id?: string
+          column_name?: string
+          created_at?: string | null
+          encryption_required?: boolean | null
+          id?: string
+          table_name?: string
         }
         Relationships: []
       }
@@ -456,6 +511,30 @@ export type Database = {
         }
         Relationships: []
       }
+      password_history: {
+        Row: {
+          clinic_id: string
+          created_at: string | null
+          id: string
+          password_hash: string
+          user_id: string
+        }
+        Insert: {
+          clinic_id: string
+          created_at?: string | null
+          id?: string
+          password_hash: string
+          user_id: string
+        }
+        Update: {
+          clinic_id?: string
+          created_at?: string | null
+          id?: string
+          password_hash?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       patients: {
         Row: {
           clinic_id: string
@@ -503,13 +582,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "clinics"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "patients_office_id_fkey"
-            columns: ["office_id"]
-            isOneToOne: false
-            referencedRelation: "office_pms_status"
-            referencedColumns: ["office_id"]
           },
           {
             foreignKeyName: "patients_office_id_fkey"
@@ -701,6 +773,48 @@ export type Database = {
         }
         Relationships: []
       }
+      security_threats: {
+        Row: {
+          clinic_id: string
+          detected_at: string | null
+          id: string
+          resolved_at: string | null
+          resolved_by: string | null
+          severity: string
+          source_ip: unknown | null
+          status: string | null
+          threat_data: Json | null
+          threat_type: string
+          user_id: string | null
+        }
+        Insert: {
+          clinic_id: string
+          detected_at?: string | null
+          id?: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          severity?: string
+          source_ip?: unknown | null
+          status?: string | null
+          threat_data?: Json | null
+          threat_type: string
+          user_id?: string | null
+        }
+        Update: {
+          clinic_id?: string
+          detected_at?: string | null
+          id?: string
+          resolved_at?: string | null
+          resolved_by?: string | null
+          severity?: string
+          source_ip?: unknown | null
+          status?: string | null
+          threat_data?: Json | null
+          threat_type?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       services: {
         Row: {
           clinic_id: string
@@ -797,6 +911,39 @@ export type Database = {
           },
         ]
       }
+      trusted_devices: {
+        Row: {
+          clinic_id: string
+          created_at: string | null
+          device_fingerprint: string
+          device_name: string | null
+          id: string
+          is_trusted: boolean | null
+          last_used: string | null
+          user_id: string
+        }
+        Insert: {
+          clinic_id: string
+          created_at?: string | null
+          device_fingerprint: string
+          device_name?: string | null
+          id?: string
+          is_trusted?: boolean | null
+          last_used?: string | null
+          user_id: string
+        }
+        Update: {
+          clinic_id?: string
+          created_at?: string | null
+          device_fingerprint?: string
+          device_name?: string | null
+          id?: string
+          is_trusted?: boolean | null
+          last_used?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       turns: {
         Row: {
           at: string
@@ -832,38 +979,81 @@ export type Database = {
           },
         ]
       }
-    }
-    Views: {
-      office_pms_status: {
+      user_mfa: {
         Row: {
-          clinic_id: string | null
+          backup_codes: string[] | null
+          clinic_id: string
           created_at: string | null
-          has_credentials: boolean | null
-          name: string | null
-          office_id: string | null
-          pms_type: string | null
-          updated_at: string | null
+          enabled: boolean | null
+          id: string
+          last_used: string | null
+          secret: string
+          user_id: string
         }
         Insert: {
-          clinic_id?: string | null
+          backup_codes?: string[] | null
+          clinic_id: string
           created_at?: string | null
-          has_credentials?: never
-          name?: string | null
-          office_id?: string | null
-          pms_type?: string | null
-          updated_at?: string | null
+          enabled?: boolean | null
+          id?: string
+          last_used?: string | null
+          secret: string
+          user_id: string
         }
         Update: {
-          clinic_id?: string | null
+          backup_codes?: string[] | null
+          clinic_id?: string
           created_at?: string | null
-          has_credentials?: never
-          name?: string | null
-          office_id?: string | null
-          pms_type?: string | null
-          updated_at?: string | null
+          enabled?: boolean | null
+          id?: string
+          last_used?: string | null
+          secret?: string
+          user_id?: string
         }
         Relationships: []
       }
+      user_sessions: {
+        Row: {
+          clinic_id: string
+          created_at: string | null
+          expires_at: string
+          id: string
+          ip_address: unknown | null
+          is_active: boolean | null
+          last_activity: string | null
+          session_token: string
+          user_agent: string | null
+          user_id: string
+        }
+        Insert: {
+          clinic_id: string
+          created_at?: string | null
+          expires_at: string
+          id?: string
+          ip_address?: unknown | null
+          is_active?: boolean | null
+          last_activity?: string | null
+          session_token: string
+          user_agent?: string | null
+          user_id: string
+        }
+        Update: {
+          clinic_id?: string
+          created_at?: string | null
+          expires_at?: string
+          id?: string
+          ip_address?: unknown | null
+          is_active?: boolean | null
+          last_activity?: string | null
+          session_token?: string
+          user_agent?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+    }
+    Views: {
+      [_ in never]: never
     }
     Functions: {
       calculate_security_metrics: {
@@ -900,6 +1090,10 @@ export type Database = {
         }
         Returns: undefined
       }
+      detect_security_threats: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
+      }
       emergency_revoke_access: {
         Args: { p_user_id: string; p_reason: string }
         Returns: undefined
@@ -915,6 +1109,18 @@ export type Database = {
       get_current_user_role: {
         Args: Record<PropertyKey, never>
         Returns: string
+      }
+      get_office_pms_status: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          office_id: string
+          name: string
+          clinic_id: string
+          pms_type: string
+          has_credentials: boolean
+          created_at: string
+          updated_at: string
+        }[]
       }
       get_user_assigned_patient_ids: {
         Args: Record<PropertyKey, never>
@@ -991,6 +1197,10 @@ export type Database = {
         }[]
       }
       validate_session_integrity: {
+        Args: Record<PropertyKey, never>
+        Returns: boolean
+      }
+      validate_session_security: {
         Args: Record<PropertyKey, never>
         Returns: boolean
       }
