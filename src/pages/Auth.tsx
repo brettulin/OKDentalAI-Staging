@@ -1,26 +1,45 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Checkbox } from '@/components/ui/checkbox';
 import { PasswordStrengthIndicator } from '@/components/security/PasswordStrengthIndicator';
-import { Mail, Key, LogIn, UserPlus } from 'lucide-react';
+import { Mail, Key, LogIn, UserPlus, Shield } from 'lucide-react';
 
 export default function Auth() {
   const { signIn, signInWithPassword, signUp, error, clearError } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('signin');
   const [authMethod, setAuthMethod] = useState<'password' | 'magic'>('password');
+  const [rememberMe, setRememberMe] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+
+  // Remember user preferences
+  useEffect(() => {
+    const savedEmail = localStorage.getItem('auth_remember_email');
+    const savedMethod = localStorage.getItem('auth_method') as 'password' | 'magic';
+    if (savedEmail) setEmail(savedEmail);
+    if (savedMethod) setAuthMethod(savedMethod);
+  }, []);
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     clearError();
+
+    // Save preferences if remember me is checked
+    if (rememberMe) {
+      localStorage.setItem('auth_remember_email', email);
+      localStorage.setItem('auth_method', authMethod);
+    } else {
+      localStorage.removeItem('auth_remember_email');
+      localStorage.removeItem('auth_method');
+    }
 
     try {
       if (authMethod === 'password') {
@@ -47,6 +66,13 @@ export default function Auth() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const validatePassword = (pwd: string): boolean => {
+    return pwd.length >= 8 && 
+           /[A-Z]/.test(pwd) && 
+           /[a-z]/.test(pwd) && 
+           /[0-9]/.test(pwd);
   };
 
   return (
@@ -139,6 +165,22 @@ export default function Auth() {
                     <Alert variant="destructive">
                       <AlertDescription>{error}</AlertDescription>
                     </Alert>
+                  )}
+
+                  {authMethod === 'password' && (
+                    <div className="flex items-center space-x-2">
+                      <Checkbox 
+                        id="remember" 
+                        checked={rememberMe}
+                        onCheckedChange={(checked) => setRememberMe(checked as boolean)}
+                      />
+                      <label
+                        htmlFor="remember"
+                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                      >
+                        Remember me on this device
+                      </label>
+                    </div>
                   )}
 
                   <Button type="submit" className="w-full" disabled={isLoading || (authMethod === 'password' && !password)}>
@@ -245,14 +287,18 @@ export default function Auth() {
                   <Button 
                     type="submit" 
                     className="w-full" 
-                    disabled={isLoading || password !== confirmPassword || !password}
+                    disabled={isLoading || password !== confirmPassword || !password || !validatePassword(password)}
                   >
                     {isLoading ? 'Creating Account...' : 'Create Account'}
                   </Button>
                 </form>
 
-                <div className="text-center text-sm text-muted-foreground">
-                  Your account will be created with password authentication
+                <div className="text-center text-sm text-muted-foreground space-y-2">
+                  <div className="flex items-center justify-center gap-2">
+                    <Shield className="h-4 w-4" />
+                    <span>Password requirements: 8+ chars, uppercase, lowercase, number</span>
+                  </div>
+                  <div>Your account will be created with secure password authentication</div>
                 </div>
               </TabsContent>
             </Tabs>
