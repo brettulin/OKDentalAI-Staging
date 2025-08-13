@@ -9,9 +9,10 @@ import { PasswordStrengthIndicator } from '@/components/security/PasswordStrengt
 import { Mail, Key, LogIn, UserPlus } from 'lucide-react';
 
 export default function Auth() {
-  const { signIn, error, clearError } = useAuth();
+  const { signIn, signInWithPassword, signUp, error, clearError } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('signin');
+  const [authMethod, setAuthMethod] = useState<'password' | 'magic'>('password');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -22,7 +23,11 @@ export default function Auth() {
     clearError();
 
     try {
-      await signIn(email);
+      if (authMethod === 'password') {
+        await signInWithPassword(email, password);
+      } else {
+        await signIn(email);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -38,8 +43,7 @@ export default function Auth() {
     clearError();
 
     try {
-      // For now, we'll use magic link for signup too
-      await signIn(email);
+      await signUp(email, password);
     } finally {
       setIsLoading(false);
     }
@@ -71,6 +75,27 @@ export default function Auth() {
               </TabsList>
 
               <TabsContent value="signin" className="space-y-4">
+                <div className="flex items-center justify-center space-x-4 mb-4">
+                  <Button
+                    variant={authMethod === 'password' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setAuthMethod('password')}
+                    className="flex items-center gap-2"
+                  >
+                    <Key className="h-4 w-4" />
+                    Password
+                  </Button>
+                  <Button
+                    variant={authMethod === 'magic' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setAuthMethod('magic')}
+                    className="flex items-center gap-2"
+                  >
+                    <Mail className="h-4 w-4" />
+                    Magic Link
+                  </Button>
+                </div>
+
                 <form onSubmit={handleSignIn} className="space-y-4">
                   <div>
                     <label htmlFor="email" className="block text-sm font-medium mb-2">
@@ -90,19 +115,58 @@ export default function Auth() {
                     </div>
                   </div>
 
+                  {authMethod === 'password' && (
+                    <div>
+                      <label htmlFor="signin-password" className="block text-sm font-medium mb-2">
+                        Password
+                      </label>
+                      <div className="relative">
+                        <Key className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          id="signin-password"
+                          type="password"
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          className="pl-10"
+                          placeholder="Enter your password"
+                          required
+                        />
+                      </div>
+                    </div>
+                  )}
+
                   {error && (
                     <Alert variant="destructive">
                       <AlertDescription>{error}</AlertDescription>
                     </Alert>
                   )}
 
-                  <Button type="submit" className="w-full" disabled={isLoading}>
-                    {isLoading ? 'Sending...' : 'Send Magic Link'}
+                  <Button type="submit" className="w-full" disabled={isLoading || (authMethod === 'password' && !password)}>
+                    {isLoading ? 
+                      (authMethod === 'password' ? 'Signing In...' : 'Sending...') : 
+                      (authMethod === 'password' ? 'Sign In' : 'Send Magic Link')
+                    }
                   </Button>
                 </form>
 
+                {authMethod === 'password' && (
+                  <div className="text-center">
+                    <Button
+                      variant="link"
+                      size="sm"
+                      onClick={() => setAuthMethod('magic')}
+                      className="text-sm text-muted-foreground hover:text-primary"
+                    >
+                      Forgot password? Use magic link instead
+                    </Button>
+                  </div>
+                )}
+
                 <div className="text-center text-sm text-muted-foreground">
-                  We'll send you a secure magic link to sign in
+                  {authMethod === 'password' ? 
+                    'Enter your password to sign in securely' :
+                    "We'll send you a secure magic link to sign in"
+                  }
                 </div>
               </TabsContent>
 
@@ -188,7 +252,7 @@ export default function Auth() {
                 </form>
 
                 <div className="text-center text-sm text-muted-foreground">
-                  For now, we'll send you a magic link to get started
+                  Your account will be created with password authentication
                 </div>
               </TabsContent>
             </Tabs>
