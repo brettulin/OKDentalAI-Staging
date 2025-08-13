@@ -46,6 +46,13 @@ import {
 } from './carestack-types.ts'
 
 import {
+  getCareStackEnhancedConfig,
+  getCareStackEnhancedHeaders,
+  CareStackAuthConfig,
+  validateCareStackAuthentication
+} from './carestack-auth.ts'
+
+import {
   mockPatients,
   mockLocations,
   mockOperatories,
@@ -62,12 +69,13 @@ export class CareStackAdapter implements PMSInterface {
   private baseUrl: string
   private useMockMode: boolean
   private cache: CareStackCache
+  private authConfig: CareStackAuthConfig
 
   constructor(credentials: CareStackCredentials) {
     this.credentials = credentials
-    // Updated to match actual API structure: /api/v1.0/
-    this.baseUrl = credentials.baseUrl || Deno.env.get('CARESTACK_BASE_URL') || 'https://api.carestack.com'
-    this.useMockMode = credentials.useMockMode ?? (Deno.env.get('CARESTACK_USE_MOCK') !== 'false')
+    this.authConfig = getCareStackEnhancedConfig()
+    this.baseUrl = this.authConfig.baseUrl
+    this.useMockMode = this.authConfig.useMock
     this.cache = {
       locations: new Map(),
       operatories: new Map(),
@@ -77,26 +85,15 @@ export class CareStackAdapter implements PMSInterface {
     console.log('CareStack adapter initialized:', {
       mockMode: this.useMockMode,
       baseUrl: this.baseUrl,
-      accountId: this.credentials.accountId
+      accountId: this.authConfig.accountId,
+      authMethod: this.authConfig.authMethod,
+      environment: this.authConfig.environment
     })
   }
 
   private getAuthHeaders(): Record<string, string> {
-    if (this.useMockMode) {
-      return {
-        'Content-Type': 'application/json',
-        'VendorKey': 'mock_vendor_key',
-        'AccountKey': 'mock_account_key',
-        'AccountId': 'mock_account_id'
-      }
-    }
-
-    return {
-      'Content-Type': 'application/json',
-      'VendorKey': this.credentials.vendorKey || Deno.env.get('CARESTACK_VENDOR_KEY') || '',
-      'AccountKey': this.credentials.accountKey || Deno.env.get('CARESTACK_ACCOUNT_KEY') || '',
-      'AccountId': this.credentials.accountId || Deno.env.get('CARESTACK_ACCOUNT_ID') || ''
-    }
+    const headers = getCareStackEnhancedHeaders(this.authConfig)
+    return headers as Record<string, string>
   }
 
   private async makeRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
@@ -107,39 +104,95 @@ export class CareStackAdapter implements PMSInterface {
         throw new Error('Simulated network failure (mock mode)')
       }
       
-      // This would be replaced with actual mock logic per endpoint
-      throw new Error('Mock implementation needed for endpoint: ' + endpoint)
+      // Route to appropriate mock method based on endpoint
+      return this.handleMockRequest<T>(endpoint, options)
     }
 
     const authHeaders = this.getAuthHeaders()
     
-    const response = await fetch(`${this.baseUrl}${endpoint}`, {
-      ...options,
-      headers: {
-        ...authHeaders,
-        ...options.headers,
-      },
-    })
-
-    if (!response.ok) {
-      const errorText = await response.text()
-      console.error('CareStack API error:', {
-        status: response.status,
-        statusText: response.statusText,
-        error: errorText
+    // Use timeout from auth config
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), this.authConfig.timeout)
+    
+    try {
+      const response = await fetch(`${this.baseUrl}${endpoint}`, {
+        ...options,
+        headers: {
+          ...authHeaders,
+          ...options.headers,
+        },
+        signal: controller.signal
       })
       
-      if (response.status === 429) {
-        throw new Error('Rate limit exceeded')
-      }
-      if (response.status === 401) {
-        throw new Error('Authentication failed - please check your credentials')
-      }
+      clearTimeout(timeoutId)
       
-      throw new Error(`CareStack API error: ${response.statusText}`)
-    }
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('CareStack API error:', {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorText
+        })
+        
+        if (response.status === 429) {
+          throw new Error('Rate limit exceeded')
+        }
+        if (response.status === 401) {
+          throw new Error('Authentication failed - please check your credentials')
+        }
+        
+        throw new Error(`CareStack API error: ${response.statusText}`)
+      }
 
-    return response.json()
+      return response.json()
+    } catch (error) {
+      clearTimeout(timeoutId)
+      if (error.name === 'AbortError') {
+        throw new Error(`Request timeout after ${this.authConfig.timeout}ms`)
+      }
+      throw error
+    }
+  }
+
+  private async handleMockRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+    // Mock router for different endpoints
+    if (endpoint.includes('/appointment-status')) {
+      return this.getAppointmentStatuses() as any
+    }
+    if (endpoint.includes('/appointments/') && endpoint.includes('/cancel')) {
+      return { success: true } as any
+    }
+    if (endpoint.includes('/appointments/') && endpoint.includes('/checkout')) {
+      return { success: true } as any
+    }
+    if (endpoint.includes('/appointments/') && endpoint.includes('/modify-status')) {
+      return { success: true } as any
+    }
+    if (endpoint.includes('/appointments/') && options.method === 'DELETE') {
+      return { success: true } as any
+    }
+    if (endpoint.includes('/appointments/') && !endpoint.includes('/')) {
+      const id = endpoint.split('/').pop()
+      return this.getAppointment(parseInt(id!)) as any
+    }
+    if (endpoint.includes('/procedure-codes')) {
+      return this.getProcedureCodes() as any
+    }
+    if (endpoint.includes('/production-types')) {
+      return this.getProductionTypes() as any
+    }
+    if (endpoint.includes('/sync/patients')) {
+      return this.syncPatients(new Date().toISOString()) as any
+    }
+    if (endpoint.includes('/sync/appointments')) {
+      return this.syncAppointments(new Date().toISOString()) as any
+    }
+    if (endpoint.includes('/sync/treatment-procedures')) {
+      return this.syncTreatmentProcedures(new Date().toISOString()) as any
+    }
+    
+    // Default mock response
+    throw new Error(`Mock implementation not found for endpoint: ${endpoint}`)
   }
 
   private getCachedData<T>(cacheMap: Map<string, CareStackCacheItem<T>>, key: string): T | null {
