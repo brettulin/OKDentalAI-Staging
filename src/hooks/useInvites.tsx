@@ -47,15 +47,16 @@ export function useInvites() {
 
       if (error) throw error;
 
-      if (data?.success) {
+      const result = data as any;
+      if (result?.success) {
         toast({
           title: 'Success',
-          description: `Welcome to ${data.clinic_name}!`,
+          description: `Welcome to ${result.clinic_name}!`,
         });
         await fetchInvites();
-        return data;
+        return result;
       } else {
-        throw new Error(data?.error || 'Failed to accept invite');
+        throw new Error(result?.error || 'Failed to accept invite');
       }
     } catch (error) {
       console.error('Error accepting invite:', error);
