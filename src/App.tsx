@@ -17,6 +17,7 @@ import NotFound from '@/pages/NotFound';
 import { Layout } from '@/components/Layout';
 import { AuthProvider } from '@/hooks/useAuth';
 import { SecurityProvider } from '@/components/security/SecurityProvider';
+import { SessionTimeout } from '@/components/security/SessionTimeout';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { PageSkeleton } from '@/components/PageSkeleton';
 
@@ -25,6 +26,7 @@ function App() {
     <ErrorBoundary>
       <AuthProvider>
         <SecurityProvider>
+          <SessionTimeout timeoutMinutes={30} warningMinutes={5} />
           <Router>
             <Layout>
             <Suspense fallback={<PageSkeleton />}>
