@@ -13,6 +13,7 @@ interface CallStatusUpdate {
   call_duration_seconds?: number;
   ai_confidence_score?: number;
   outcome?: string;
+  twilio_call_sid?: string;
 }
 
 interface UserPresence {

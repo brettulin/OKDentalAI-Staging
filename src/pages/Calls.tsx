@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { CallThreadDrawer } from '@/components/calls/CallThreadDrawer';
 import { RealtimeCallDashboard } from '@/components/calls/RealtimeCallDashboard';
+import TwilioCallManager from '@/components/calls/TwilioCallManager';
 import CallsExport from '@/pages/calls/CallsExport';
 import { formatDistanceToNow } from 'date-fns';
 
@@ -254,6 +255,10 @@ const CallsPage = () => {
             Export CSV
           </Button>
         </div>
+      </div>
+
+      <div className="mb-6">
+        <TwilioCallManager />
       </div>
 
       <div className="mb-6">
