@@ -107,16 +107,15 @@ serve(async (req) => {
 
         console.log('Creating/updating call record for:', { CallSid, clinic_id });
 
-        // Generate TwiML for AI handling
+        // Generate TwiML for AI call handling
         const twimlResponse = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say>Hello, thank you for calling. Please hold while we connect you to our AI assistant.</Say>
-  <Connect>
-    <Stream url="wss://${Deno.env.get('SUPABASE_URL')?.replace('https://', '')}/functions/v1/twilio-media-stream">
-      <Parameter name="callSid" value="${CallSid}" />
-      <Parameter name="clinicId" value="${clinic_id}" />
-    </Stream>
-  </Connect>
+  <Say>Hello, thank you for calling. You've reached our AI dental assistant. How can I help you today?</Say>
+  <Gather action="https://zvpezltqpphvolzgfhme.functions.supabase.co/twilio-ai-handler" method="POST" timeout="10" finishOnKey="#" input="speech" speechTimeout="auto">
+    <Say>Please tell me how I can assist you today.</Say>
+  </Gather>
+  <Say>Thank you for calling. Have a great day! Goodbye.</Say>
+  <Hangup/>
 </Response>`;
 
         return new Response(twimlResponse, {
