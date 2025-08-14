@@ -89,6 +89,65 @@ const AISettingsPage = () => {
     },
   });
 
+  // Build greeting audio
+  const buildGreetingMutation = useMutation({
+    mutationFn: async () => {
+      if (!profile?.clinic_id) throw new Error('No clinic ID');
+      
+      const { data, error } = await supabase.functions.invoke('ai-build-greeting', {
+        body: { clinic_id: profile.clinic_id },
+      });
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['ai-settings'] });
+      toast({
+        title: 'Greeting built successfully',
+        description: `Greeting audio created with ${data.voice_id} voice`,
+      });
+    },
+    onError: (error) => {
+      console.error('Error building greeting:', error);
+      toast({
+        title: 'Error building greeting',
+        description: error.message || 'Failed to build greeting audio.',
+        variant: 'destructive',
+      });
+    },
+  });
+
+  // QA Test
+  const qaMutation = useMutation({
+    mutationFn: async (dryRun?: boolean) => {
+      if (!profile?.clinic_id) throw new Error('No clinic ID');
+      
+      const { data, error } = await supabase.functions.invoke('twilio-voice-qa', {
+        body: { clinic_id: profile.clinic_id, dry_run: dryRun || false },
+      });
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: (data) => {
+      console.log('QA Data:', data);
+      setQaData(data);
+      toast({
+        title: 'QA Test completed',
+        description: 'Voice call flow has been analyzed',
+      });
+    },
+    onError: (error) => {
+      console.error('QA Test error:', error);
+      toast({
+        title: 'QA Test failed',
+        description: error.message || 'Failed to run QA test.',
+        variant: 'destructive',
+      });
+    },
+  });
+
   // Test voice synthesis
   const testVoiceMutation = useMutation({
     mutationFn: async (text: string) => {
@@ -138,18 +197,19 @@ const AISettingsPage = () => {
   const [formData, setFormData] = useState({
     voice_provider: settings?.voice_provider || 'elevenlabs',
     voice_model: settings?.voice_model || 'eleven_multilingual_v2',
-    voice_id: (settings as any)?.voice_id || '9BWtsMINqrJLrRacOk9x', // Aria default
+    voice_id: (settings as any)?.voice_id || 'sIak7pFapfSLCfctxdOu', // Default to clarice
     language: settings?.language || 'en',
     transfer_number: settings?.transfer_number || '',
-    greeting: '', // Add greeting field
+    custom_greeting: settings?.custom_greeting || '', // Updated field name
+    voice_enabled: settings?.voice_enabled !== false, // Default to enabled
     booking_policy: settings?.booking_policy || {},
     auto_booking_enabled: (settings?.booking_policy as any)?.auto_booking_enabled || false,
     require_insurance: (settings?.booking_policy as any)?.require_insurance || false,
     max_advance_days: (settings?.booking_policy as any)?.max_advance_days || 30,
-    voice_enabled: (settings?.booking_policy as any)?.voice_enabled !== false, // Default to enabled
   });
 
   const [testGreeting, setTestGreeting] = useState('');
+  const [qaData, setQaData] = useState<any>(null);
 
   React.useEffect(() => {
     if (settings) {
@@ -157,15 +217,15 @@ const AISettingsPage = () => {
       setFormData({
         voice_provider: settings.voice_provider || 'elevenlabs',
         voice_model: settings.voice_model || 'eleven_multilingual_v2',
-        voice_id: (settings as any).voice_id || '9BWtsMINqrJLrRacOk9x',
+        voice_id: (settings as any).voice_id || 'sIak7pFapfSLCfctxdOu', // Default to clarice
         language: settings.language || 'en',
         transfer_number: settings.transfer_number || '',
-        greeting: (settings.booking_policy as any)?.greeting || '',
+        custom_greeting: settings.custom_greeting || '', // Updated field name
+        voice_enabled: settings.voice_enabled !== false, // Default to enabled
         booking_policy: settings.booking_policy || {},
         auto_booking_enabled: bookingPolicy.auto_booking_enabled || false,
         require_insurance: bookingPolicy.require_insurance || false,
         max_advance_days: bookingPolicy.max_advance_days || 30,
-        voice_enabled: bookingPolicy.voice_enabled !== false, // Default to enabled
       });
     }
   }, [settings]);
@@ -179,20 +239,27 @@ const AISettingsPage = () => {
       voice_id: formData.voice_id,
       language: formData.language,
       transfer_number: formData.transfer_number,
+      custom_greeting: formData.custom_greeting, // Updated field name
+      voice_enabled: formData.voice_enabled,
       booking_policy: {
         auto_booking_enabled: formData.auto_booking_enabled,
         require_insurance: formData.require_insurance,
         max_advance_days: formData.max_advance_days,
-        greeting: formData.greeting,
+        greeting: formData.custom_greeting, // For backward compatibility
         voice_enabled: formData.voice_enabled,
       }
     };
 
     await saveSettingsMutation.mutateAsync(submitData);
+    
+    // Build greeting audio after saving settings
+    if (formData.custom_greeting) {
+      await buildGreetingMutation.mutateAsync();
+    }
   };
 
   const handleTestVoice = () => {
-    const testText = formData.greeting || "Hello! Thank you for calling our dental office. How can I assist you today?";
+    const testText = formData.custom_greeting || "Hello! Thank you for calling our dental office. How can I assist you today?";
     testVoiceMutation.mutate(testText);
   };
 
@@ -322,16 +389,16 @@ const AISettingsPage = () => {
             </div>
 
             <div>
-              <Label htmlFor="greeting">Custom Greeting</Label>
+              <Label htmlFor="custom_greeting">Custom Greeting</Label>
               <Textarea
-                id="greeting"
-                value={formData.greeting}
-                onChange={(e) => setFormData(prev => ({ ...prev, greeting: e.target.value }))}
+                id="custom_greeting"
+                value={formData.custom_greeting}
+                onChange={(e) => setFormData(prev => ({ ...prev, custom_greeting: e.target.value }))}
                 placeholder="Hello! Thank you for calling our dental office. How can I assist you today?"
                 rows={3}
               />
               <p className="text-sm text-muted-foreground mt-1">
-                This greeting will be used when the AI answers calls. If empty, a default greeting will be used.
+                This greeting will be used when the AI answers calls. Audio will be pre-generated with your selected voice.
               </p>
               <div className="mt-2 flex gap-2">
                 <Button
@@ -339,7 +406,7 @@ const AISettingsPage = () => {
                   variant="outline"
                   size="sm"
                   onClick={() => {
-                    const greeting = formData.greeting || "Hello! Thank you for calling our dental office. How can I assist you today?";
+                    const greeting = formData.custom_greeting || "Hello! Thank you for calling our dental office. How can I assist you today?";
                     const languageText = formData.language === 'es' ? 'Spanish' : 
                                         formData.language === 'fr' ? 'French' : 
                                         formData.language === 'de' ? 'German' : 
@@ -365,10 +432,33 @@ const AISettingsPage = () => {
                   )}
                   Test Voice
                 </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => buildGreetingMutation.mutate()}
+                  disabled={buildGreetingMutation.isPending || !formData.custom_greeting}
+                  className="flex items-center gap-1"
+                >
+                  {buildGreetingMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Play className="h-4 w-4" />
+                  )}
+                  Build Greeting Audio
+                </Button>
               </div>
               {testGreeting && (
                 <div className="mt-2 p-3 bg-muted rounded-lg text-sm">
                   <strong>Preview:</strong> {testGreeting}
+                </div>
+              )}
+              {settings?.greeting_audio_url && (
+                <div className="mt-2 p-3 bg-green-50 dark:bg-green-900/20 rounded-lg text-sm">
+                  <strong>✓ Greeting audio ready:</strong> 
+                  <audio controls className="mt-1 w-full">
+                    <source src={settings.greeting_audio_url} type="audio/mpeg" />
+                  </audio>
                 </div>
               )}
             </div>
@@ -437,6 +527,72 @@ const AISettingsPage = () => {
                 How far in advance can patients book appointments
               </p>
             </div>
+          </CardContent>
+        </Card>
+
+        
+        {/* QA Testing */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Voice Call QA Testing</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => qaMutation.mutate(true)}
+                disabled={qaMutation.isPending}
+                className="flex items-center gap-1"
+              >
+                {qaMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Play className="h-4 w-4" />
+                )}
+                Test Greeting (Dry Run)
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => qaMutation.mutate(false)}
+                disabled={qaMutation.isPending}
+                className="flex items-center gap-1"
+              >
+                {qaMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Settings className="h-4 w-4" />
+                )}
+                Show QA Data
+              </Button>
+            </div>
+            
+            {qaData && (
+              <div className="mt-4 space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="p-3 bg-muted rounded-lg">
+                    <h4 className="font-semibold text-sm">Clinic Resolution</h4>
+                    <p className="text-xs text-muted-foreground">Clinic ID: {qaData.clinic_resolution?.clinic_id}</p>
+                    <p className="text-xs text-muted-foreground">Phone: {qaData.clinic_resolution?.phone_number}</p>
+                    <p className="text-xs text-muted-foreground">Status: {qaData.clinic_resolution?.status}</p>
+                  </div>
+                  <div className="p-3 bg-muted rounded-lg">
+                    <h4 className="font-semibold text-sm">Voice Settings</h4>
+                    <p className="text-xs text-muted-foreground">Provider: {qaData.ai_settings?.voice_provider}</p>
+                    <p className="text-xs text-muted-foreground">Voice ID: {qaData.ai_settings?.voice_id}</p>
+                    <p className="text-xs text-muted-foreground">Enabled: {qaData.ai_settings?.voice_enabled ? 'Yes' : 'No'}</p>
+                  </div>
+                </div>
+                
+                {qaData.generated_twiml && (
+                  <div className="p-3 bg-muted rounded-lg">
+                    <h4 className="font-semibold text-sm mb-2">Generated TwiML</h4>
+                    <pre className="text-xs overflow-x-auto whitespace-pre-wrap">{qaData.generated_twiml}</pre>
+                  </div>
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
 
