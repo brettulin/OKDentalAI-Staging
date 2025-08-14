@@ -1,6 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { getAuthContext } from '../_shared/auth.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -15,6 +14,7 @@ serve(async (req) => {
 
   try {
     console.log('Twilio webhook received:', req.method);
+    console.log('Request headers:', Object.fromEntries(req.headers.entries()));
     
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -29,7 +29,7 @@ serve(async (req) => {
       webhookData[key] = value.toString();
     }
 
-    console.log('Webhook data:', webhookData);
+    console.log('Webhook data received:', webhookData);
 
     const {
       CallSid,
@@ -44,16 +44,42 @@ serve(async (req) => {
       EndTime
     } = webhookData;
 
-    // Find clinic by phone number
-    const { data: office } = await supabase
+    console.log('Processing call:', { CallSid, CallStatus, From, To });
+
+    // Find clinic by phone number - first try exact match in pms_credentials
+    let { data: office } = await supabase
       .from('offices')
-      .select('clinic_id')
+      .select('clinic_id, name, pms_credentials')
       .eq('pms_credentials->twilio_phone', To)
       .single();
 
+    // If no exact match found, try to find by main phone in clinics table
+    if (!office) {
+      console.log('No office found with twilio_phone, checking clinics main_phone');
+      const { data: clinic } = await supabase
+        .from('clinics')
+        .select('id, name, main_phone')
+        .eq('main_phone', To)
+        .single();
+      
+      if (clinic) {
+        // Find the first office for this clinic
+        const { data: clinicOffice } = await supabase
+          .from('offices')
+          .select('clinic_id, name, pms_credentials')
+          .eq('clinic_id', clinic.id)
+          .limit(1)
+          .single();
+        
+        office = clinicOffice;
+        console.log('Found clinic office:', office);
+      }
+    }
+
     if (!office?.clinic_id) {
       console.log('No clinic found for phone number:', To);
-      return new Response('<?xml version="1.0" encoding="UTF-8"?><Response></Response>', {
+      console.log('Available offices:', await supabase.from('offices').select('id, name, pms_credentials').limit(5));
+      return new Response('<?xml version="1.0" encoding="UTF-8"?><Response><Say>Thank you for calling. Please try again later.</Say></Response>', {
         headers: { 'Content-Type': 'text/xml' }
       });
     }
@@ -79,9 +105,12 @@ serve(async (req) => {
           console.error('Error upserting call:', upsertError);
         }
 
+        console.log('Creating/updating call record for:', { CallSid, clinic_id });
+
         // Generate TwiML for AI handling
         const twimlResponse = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
+  <Say>Hello, thank you for calling. Please hold while we connect you to our AI assistant.</Say>
   <Connect>
     <Stream url="wss://${Deno.env.get('SUPABASE_URL')?.replace('https://', '')}/functions/v1/twilio-media-stream">
       <Parameter name="callSid" value="${CallSid}" />
@@ -111,6 +140,8 @@ serve(async (req) => {
 
         if (updateError) {
           console.error('Error updating call:', updateError);
+        } else {
+          console.log('Successfully updated call:', CallSid);
         }
 
         // Log call event
