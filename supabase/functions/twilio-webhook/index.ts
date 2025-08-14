@@ -107,15 +107,12 @@ serve(async (req) => {
 
         console.log('Creating/updating call record for:', { CallSid, clinic_id });
 
-        // Generate TwiML for AI call handling with ElevenLabs clarice voice
+        // Generate TwiML for REAL-TIME AI voice with WebSocket (sub-second latency)
         const twimlResponse = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say voice="Polly.Joanna-Neural">Hello! I'm your AI dental assistant.</Say>
-  <Gather action="https://zvpezltqpphvolzgfhme.functions.supabase.co/functions/v1/twilio-elevenlabs-voice" method="POST" timeout="6" input="speech" speechTimeout="auto">
-    <Say voice="Polly.Joanna-Neural">How can I help you?</Say>
-  </Gather>
-  <Say voice="Polly.Joanna-Neural">Thank you for calling. Goodbye!</Say>
-  <Hangup/>
+  <Connect>
+    <Stream url="wss://zvpezltqpphvolzgfhme.functions.supabase.co/functions/v1/twilio-realtime-voice" />
+  </Connect>
 </Response>`;
 
         return new Response(twimlResponse, {
