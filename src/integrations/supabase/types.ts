@@ -7,7 +7,7 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instanciate createClient with right options
+  // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
     PostgrestVersion: "13.0.4"
@@ -1626,9 +1626,9 @@ export type Database = {
         Returns: {
           category: string
           check_name: string
-          status: string
           details: string
           priority: string
+          status: string
         }[]
       }
       create_clinic_for_new_user: {
@@ -1645,11 +1645,11 @@ export type Database = {
       }
       create_security_alert: {
         Args: {
-          p_clinic_id: string
           p_alert_type: string
-          p_severity: string
+          p_clinic_id: string
           p_description: string
           p_metadata?: Json
+          p_severity: string
         }
         Returns: undefined
       }
@@ -1662,24 +1662,24 @@ export type Database = {
         Returns: undefined
       }
       emergency_revoke_access: {
-        Args: { p_user_id: string; p_reason: string }
+        Args: { p_reason: string; p_user_id: string }
         Returns: undefined
       }
       emergency_security_response: {
         Args: {
-          p_incident_type: string
-          p_severity: string
           p_description: string
           p_immediate_action?: string
+          p_incident_type: string
+          p_severity: string
         }
         Returns: undefined
       }
       encrypt_patient_field: {
-        Args: { p_value: string; p_field_type: string }
+        Args: { p_field_type: string; p_value: string }
         Returns: string
       }
       encrypt_sensitive_field: {
-        Args: { p_value: string; p_context?: string }
+        Args: { p_context?: string; p_value: string }
         Returns: string
       }
       get_allowed_call_outcomes: {
@@ -1693,12 +1693,12 @@ export type Database = {
       get_office_pms_status: {
         Args: Record<PropertyKey, never>
         Returns: {
-          office_id: string
-          name: string
           clinic_id: string
-          pms_type: string
-          has_credentials: boolean
           created_at: string
+          has_credentials: boolean
+          name: string
+          office_id: string
+          pms_type: string
           updated_at: string
         }[]
       }
@@ -1717,56 +1717,56 @@ export type Database = {
       log_admin_action: {
         Args: {
           p_action_type: string
-          p_resource_type: string
-          p_resource_id?: string
           p_metadata?: Json
+          p_resource_id?: string
+          p_resource_type: string
         }
         Returns: undefined
       }
       log_security_event: {
         Args: {
-          p_event_type: string
           p_event_category?: string
-          p_resource_type?: string
-          p_resource_id?: string
-          p_risk_level?: string
+          p_event_type: string
           p_metadata?: Json
+          p_resource_id?: string
+          p_resource_type?: string
+          p_risk_level?: string
         }
         Returns: undefined
       }
       log_sensitive_access: {
         Args: {
-          p_clinic_id: string
           p_action_type: string
-          p_resource_type: string
-          p_resource_id?: string
+          p_clinic_id: string
           p_metadata?: Json
+          p_resource_id?: string
+          p_resource_type: string
         }
         Returns: undefined
       }
       log_voice_performance: {
         Args: {
-          p_operation_type: string
-          p_latency_ms: number
-          p_success: boolean
-          p_error_message?: string
-          p_voice_model?: string
-          p_voice_id?: string
-          p_text_length?: number
           p_audio_duration_ms?: number
+          p_error_message?: string
+          p_latency_ms: number
           p_metadata?: Json
+          p_operation_type: string
+          p_success: boolean
+          p_text_length?: number
+          p_voice_id?: string
+          p_voice_model?: string
         }
         Returns: undefined
       }
       update_admin_role: {
         Args: {
-          target_user_id: string
           new_admin_role: Database["public"]["Enums"]["admin_role_type"]
+          target_user_id: string
         }
         Returns: undefined
       }
       update_user_role: {
-        Args: { target_user_id: string; new_role: string }
+        Args: { new_role: string; target_user_id: string }
         Returns: undefined
       }
       user_can_access_patient: {
@@ -1783,9 +1783,9 @@ export type Database = {
       }
       validate_comprehensive_access: {
         Args: {
-          p_resource_type: string
-          p_resource_id: string
           p_operation: string
+          p_resource_id: string
+          p_resource_type: string
         }
         Returns: boolean
       }
@@ -1795,15 +1795,15 @@ export type Database = {
       }
       validate_enhanced_access: {
         Args: {
-          p_resource_type: string
-          p_resource_id: string
-          p_operation: string
           p_data_classification?: string
+          p_operation: string
+          p_resource_id: string
+          p_resource_type: string
         }
         Returns: boolean
       }
       validate_patient_access_with_logging: {
-        Args: { p_patient_id: string; p_operation: string }
+        Args: { p_operation: string; p_patient_id: string }
         Returns: boolean
       }
       validate_pms_credential_access: {
@@ -1818,8 +1818,8 @@ export type Database = {
         Args: { p_clinic_id: string }
         Returns: {
           check_name: string
-          status: string
           details: string
+          status: string
         }[]
       }
       validate_secure_session: {
@@ -1830,10 +1830,10 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: {
           check_name: string
-          status: string
-          severity: string
           description: string
           remediation: string
+          severity: string
+          status: string
         }[]
       }
       validate_session_integrity: {
