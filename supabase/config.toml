@@ -1,5 +1,11 @@
 project_id = "zvpezltqpphvolzgfhme"
 
+[functions.twilio-webhook]
+verify_jwt = false
+
+[functions.twilio-media-stream]
+verify_jwt = false
+
 [functions.pms-carestack-list-locations]
 verify_jwt = true
 
