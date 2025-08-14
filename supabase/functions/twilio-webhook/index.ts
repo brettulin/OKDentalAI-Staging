@@ -46,16 +46,22 @@ serve(async (req) => {
 
     console.log('Processing call:', { CallSid, CallStatus, From, To });
 
-    // Find clinic by phone number - first try exact match in pms_credentials
-    let { data: office } = await supabase
-      .from('offices')
-      .select('clinic_id, name, pms_credentials')
-      .eq('pms_credentials->twilio_phone', To)
+    // 1. Find clinic by phone number using phone_numbers table
+    const { data: phoneNumber } = await supabase
+      .from('phone_numbers')
+      .select('clinic_id, e164, twilio_sid')
+      .eq('e164', To)
+      .eq('status', 'active')
       .single();
 
-    // If no exact match found, try to find by main phone in clinics table
-    if (!office) {
-      console.log('No office found with twilio_phone, checking clinics main_phone');
+    let clinic_id: string | null = null;
+
+    if (phoneNumber) {
+      clinic_id = phoneNumber.clinic_id;
+      console.log('Found clinic via phone_numbers:', { clinic_id, e164: phoneNumber.e164 });
+    } else {
+      // Fallback: try clinics.main_phone
+      console.log('No phone number found, checking clinics main_phone');
       const { data: clinic } = await supabase
         .from('clinics')
         .select('id, name, main_phone')
@@ -63,28 +69,27 @@ serve(async (req) => {
         .single();
       
       if (clinic) {
-        // Find the first office for this clinic
-        const { data: clinicOffice } = await supabase
-          .from('offices')
-          .select('clinic_id, name, pms_credentials')
-          .eq('clinic_id', clinic.id)
-          .limit(1)
-          .single();
-        
-        office = clinicOffice;
-        console.log('Found clinic office:', office);
+        clinic_id = clinic.id;
+        console.log('Found clinic via main_phone:', { clinic_id, name: clinic.name });
       }
     }
 
-    if (!office?.clinic_id) {
+    if (!clinic_id) {
       console.log('No clinic found for phone number:', To);
-      console.log('Available offices:', await supabase.from('offices').select('id, name, pms_credentials').limit(5));
+      console.log('Available phone numbers:', await supabase.from('phone_numbers').select('e164, clinic_id').limit(5));
       return new Response('<?xml version="1.0" encoding="UTF-8"?><Response><Say>Thank you for calling. Please try again later.</Say></Response>', {
         headers: { 'Content-Type': 'text/xml' }
       });
     }
 
-    const clinic_id = office.clinic_id;
+    // 2. Load AI settings for the clinic
+    const { data: aiSettings } = await supabase
+      .from('ai_settings')
+      .select('*')
+      .eq('clinic_id', clinic_id)
+      .single();
+
+    console.log('AI Settings loaded:', aiSettings);
 
     // Handle different call statuses
     switch (CallStatus) {
@@ -107,16 +112,27 @@ serve(async (req) => {
 
         console.log('Creating/updating call record for:', { CallSid, clinic_id });
 
-        // Generate TwiML for immediate clarice voice response
-        const twimlResponse = `<?xml version="1.0" encoding="UTF-8"?>
-<Response>
-  <Say voice="Polly.Joanna-Neural">Hello! I'm your AI dental assistant. How can I help you today?</Say>
-  <Gather action="https://zvpezltqpphvolzgfhme.functions.supabase.co/functions/v1/twilio-clarice-voice" method="POST" timeout="8" input="speech" speechTimeout="auto">
-    <Say voice="Polly.Joanna-Neural">Please tell me how I can assist you.</Say>
-  </Gather>
-  <Say voice="Polly.Joanna-Neural">Thank you for calling. Goodbye!</Say>
-  <Hangup/>
-</Response>`;
+        // Build TwiML response using AI settings
+        let twimlResponse = '<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n';
+
+        if (aiSettings?.greeting_audio_url) {
+          // Use pre-rendered greeting audio
+          twimlResponse += `  <Play>${aiSettings.greeting_audio_url}</Play>\n`;
+        } else {
+          // Fallback to text greeting
+          const greeting = aiSettings?.custom_greeting || 'Hello, my name is Clarice from Family Dental, how may I help you?';
+          twimlResponse += `  <Say>${greeting}</Say>\n`;
+        }
+
+        // Add gather for voice input
+        twimlResponse += `  <Gather action="https://zvpezltqpphvolzgfhme.functions.supabase.co/functions/v1/twilio-clarice-voice" method="POST" timeout="8" input="speech" speechTimeout="auto">\n`;
+        twimlResponse += `    <Say>Please tell me how I can assist you.</Say>\n`;
+        twimlResponse += `  </Gather>\n`;
+        twimlResponse += `  <Say>Thank you for calling. Goodbye!</Say>\n`;
+        twimlResponse += `  <Hangup/>\n`;
+        twimlResponse += `</Response>`;
+
+        console.log('Generated TwiML:', twimlResponse);
 
         return new Response(twimlResponse, {
           headers: { 'Content-Type': 'text/xml' }

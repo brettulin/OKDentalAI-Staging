@@ -21,6 +21,12 @@ verify_jwt = false
 [functions.twilio-media-stream]
 verify_jwt = false
 
+[functions.ai-build-greeting]
+verify_jwt = true
+
+[functions.twilio-voice-qa]
+verify_jwt = true
+
 [functions.pms-carestack-list-locations]
 verify_jwt = true
 

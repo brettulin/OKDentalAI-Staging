@@ -19,10 +19,13 @@ export type Database = {
           booking_policy: Json | null
           clinic_id: string
           created_at: string
+          custom_greeting: string | null
+          greeting_audio_url: string | null
           id: string
           language: string | null
           transfer_number: string | null
           updated_at: string
+          voice_enabled: boolean | null
           voice_id: string | null
           voice_model: string | null
           voice_provider: string | null
@@ -31,10 +34,13 @@ export type Database = {
           booking_policy?: Json | null
           clinic_id: string
           created_at?: string
+          custom_greeting?: string | null
+          greeting_audio_url?: string | null
           id?: string
           language?: string | null
           transfer_number?: string | null
           updated_at?: string
+          voice_enabled?: boolean | null
           voice_id?: string | null
           voice_model?: string | null
           voice_provider?: string | null
@@ -43,10 +49,13 @@ export type Database = {
           booking_policy?: Json | null
           clinic_id?: string
           created_at?: string
+          custom_greeting?: string | null
+          greeting_audio_url?: string | null
           id?: string
           language?: string | null
           transfer_number?: string | null
           updated_at?: string
+          voice_enabled?: boolean | null
           voice_id?: string | null
           voice_model?: string | null
           voice_provider?: string | null
@@ -832,6 +841,39 @@ export type Database = {
           response_time_ms?: number
           status_code?: number
           user_id?: string | null
+        }
+        Relationships: []
+      }
+      phone_numbers: {
+        Row: {
+          capabilities: Json | null
+          clinic_id: string
+          created_at: string | null
+          e164: string
+          id: string
+          status: string | null
+          twilio_sid: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          capabilities?: Json | null
+          clinic_id: string
+          created_at?: string | null
+          e164: string
+          id?: string
+          status?: string | null
+          twilio_sid?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          capabilities?: Json | null
+          clinic_id?: string
+          created_at?: string | null
+          e164?: string
+          id?: string
+          status?: string | null
+          twilio_sid?: string | null
+          updated_at?: string | null
         }
         Relationships: []
       }
