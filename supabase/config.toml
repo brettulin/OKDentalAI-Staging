@@ -15,6 +15,9 @@ verify_jwt = false
 [functions.twilio-realtime-voice]
 verify_jwt = false
 
+[functions.twilio-clarice-voice]
+verify_jwt = false
+
 [functions.twilio-media-stream]
 verify_jwt = false
 
