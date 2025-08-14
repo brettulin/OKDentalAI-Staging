@@ -6,6 +6,14 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Twilio signature validation (optional, can be disabled for local testing)
+function validateTwilioSignature(signature: string, url: string, params: Record<string, string>): boolean {
+  // TODO: Implement Twilio signature validation if needed
+  // For now, we'll skip validation but log the signature for debugging
+  console.log('Twilio signature received:', signature);
+  return true; // Allow all requests for now
+}
+
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -13,8 +21,9 @@ serve(async (req) => {
   }
 
   try {
-    console.log('Twilio webhook received:', req.method);
-    console.log('Request headers:', Object.fromEntries(req.headers.entries()));
+    console.log('=== TWILIO WEBHOOK START ===');
+    console.log('Method:', req.method);
+    console.log('Headers:', Object.fromEntries(req.headers.entries()));
     
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -29,7 +38,7 @@ serve(async (req) => {
       webhookData[key] = value.toString();
     }
 
-    console.log('Webhook data received:', webhookData);
+    console.log('Webhook data:', webhookData);
 
     const {
       CallSid,
@@ -44,57 +53,79 @@ serve(async (req) => {
       EndTime
     } = webhookData;
 
-    console.log('Processing call:', { CallSid, CallStatus, From, To });
+    console.log('Call details:', { CallSid, CallStatus, From, To });
 
-    // 1. Find clinic by phone number using phone_numbers table
-    const { data: phoneNumber } = await supabase
+    // Optional: Validate Twilio signature
+    const twilioSignature = req.headers.get('x-twilio-signature');
+    if (twilioSignature && !validateTwilioSignature(twilioSignature, req.url, webhookData)) {
+      console.warn('Invalid Twilio signature');
+      // In production, you might want to reject invalid signatures
+      // return new Response('Forbidden', { status: 403 });
+    }
+
+    // Step 1: Resolve clinic from phone_numbers table using exact E.164 match
+    console.log('=== CLINIC RESOLUTION ===');
+    console.log('Looking up phone number:', To);
+    
+    const { data: phoneNumber, error: phoneError } = await supabase
       .from('phone_numbers')
-      .select('clinic_id, e164, twilio_sid')
+      .select('clinic_id, e164, twilio_sid, status')
       .eq('e164', To)
       .eq('status', 'active')
       .single();
 
-    let clinic_id: string | null = null;
-
-    if (phoneNumber) {
-      clinic_id = phoneNumber.clinic_id;
-      console.log('Found clinic via phone_numbers:', { clinic_id, e164: phoneNumber.e164 });
-    } else {
-      // Fallback: try clinics.main_phone
-      console.log('No phone number found, checking clinics main_phone');
-      const { data: clinic } = await supabase
-        .from('clinics')
-        .select('id, name, main_phone')
-        .eq('main_phone', To)
-        .single();
+    if (phoneError || !phoneNumber) {
+      console.error('Phone number lookup failed:', phoneError);
+      console.log('No active phone number found for:', To);
       
-      if (clinic) {
-        clinic_id = clinic.id;
-        console.log('Found clinic via main_phone:', { clinic_id, name: clinic.name });
-      }
-    }
-
-    if (!clinic_id) {
-      console.log('No clinic found for phone number:', To);
-      console.log('Available phone numbers:', await supabase.from('phone_numbers').select('e164, clinic_id').limit(5));
-      return new Response('<?xml version="1.0" encoding="UTF-8"?><Response><Say>Thank you for calling. Please try again later.</Say></Response>', {
+      // Log available phone numbers for debugging
+      const { data: allNumbers } = await supabase
+        .from('phone_numbers')
+        .select('e164, clinic_id, status')
+        .limit(10);
+      console.log('Available phone numbers:', allNumbers);
+      
+      // Return fallback TwiML
+      const fallbackTwiML = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say>Thanks for calling. Please try again later.</Say>
+  <Hangup/>
+</Response>`;
+      
+      return new Response(fallbackTwiML, {
         headers: { 'Content-Type': 'text/xml' }
       });
     }
 
-    // 2. Load AI settings for the clinic
-    const { data: aiSettings } = await supabase
+    const clinic_id = phoneNumber.clinic_id;
+    console.log('✅ Clinic resolved:', { clinic_id, e164: phoneNumber.e164 });
+
+    // Step 2: Query AI settings for the resolved clinic
+    console.log('=== AI SETTINGS LOOKUP ===');
+    const { data: aiSettings, error: settingsError } = await supabase
       .from('ai_settings')
-      .select('*')
+      .select('voice_provider, voice_model, voice_id, language, custom_greeting, greeting_audio_url, voice_enabled')
       .eq('clinic_id', clinic_id)
       .single();
 
-    console.log('AI Settings loaded:', aiSettings);
+    if (settingsError) {
+      console.error('AI settings lookup failed:', settingsError);
+    }
+
+    console.log('AI Settings loaded:', {
+      voice_provider: aiSettings?.voice_provider,
+      voice_id: aiSettings?.voice_id,
+      voice_enabled: aiSettings?.voice_enabled,
+      has_greeting_audio: !!aiSettings?.greeting_audio_url,
+      custom_greeting_length: aiSettings?.custom_greeting?.length || 0
+    });
 
     // Handle different call statuses
     switch (CallStatus) {
       case 'ringing':
       case 'in-progress':
+        console.log('=== CALL PROCESSING ===');
+        
         // Create or update call record
         const { error: upsertError } = await supabase
           .from('calls')
@@ -110,21 +141,26 @@ serve(async (req) => {
           console.error('Error upserting call:', upsertError);
         }
 
-        console.log('Creating/updating call record for:', { CallSid, clinic_id });
+        console.log('Call record created/updated for:', { CallSid, clinic_id });
 
-        // Build TwiML response using AI settings
+        // Step 3: Build optimized TwiML response
+        console.log('=== TWIML GENERATION ===');
         let twimlResponse = '<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n';
 
-        if (aiSettings?.greeting_audio_url) {
-          // Use pre-rendered greeting audio
+        const useGreetingAudio = aiSettings?.greeting_audio_url && aiSettings?.voice_enabled;
+        
+        if (useGreetingAudio) {
+          // Use pre-rendered greeting audio for fastest response
+          console.log('✅ Using pre-rendered greeting audio:', aiSettings.greeting_audio_url);
           twimlResponse += `  <Play>${aiSettings.greeting_audio_url}</Play>\n`;
         } else {
           // Fallback to text greeting
           const greeting = aiSettings?.custom_greeting || 'Hello, my name is Clarice from Family Dental, how may I help you?';
+          console.log('📝 Using text greeting:', greeting.substring(0, 50) + '...');
           twimlResponse += `  <Say>${greeting}</Say>\n`;
         }
 
-        // Add gather for voice input
+        // Add gather for voice input - redirect to AI handler
         twimlResponse += `  <Gather action="https://zvpezltqpphvolzgfhme.functions.supabase.co/functions/v1/twilio-clarice-voice" method="POST" timeout="8" input="speech" speechTimeout="auto">\n`;
         twimlResponse += `    <Say>Please tell me how I can assist you.</Say>\n`;
         twimlResponse += `  </Gather>\n`;
@@ -132,7 +168,13 @@ serve(async (req) => {
         twimlResponse += `  <Hangup/>\n`;
         twimlResponse += `</Response>`;
 
-        console.log('Generated TwiML:', twimlResponse);
+        // Log final TwiML and key metrics
+        console.log('=== FINAL RESPONSE ===');
+        console.log('Generated TwiML length:', twimlResponse.length);
+        console.log('Used greeting audio:', useGreetingAudio);
+        console.log('Clinic ID:', clinic_id);
+        console.log('Matched number:', phoneNumber.e164);
+        console.log('TwiML Response:', twimlResponse);
 
         return new Response(twimlResponse, {
           headers: { 'Content-Type': 'text/xml' }
@@ -142,6 +184,8 @@ serve(async (req) => {
       case 'busy':
       case 'failed':
       case 'no-answer':
+        console.log('=== CALL COMPLETION ===');
+        
         // Update call with final status and duration
         const { error: updateError } = await supabase
           .from('calls')
@@ -156,7 +200,7 @@ serve(async (req) => {
         if (updateError) {
           console.error('Error updating call:', updateError);
         } else {
-          console.log('Successfully updated call:', CallSid);
+          console.log('✅ Call updated successfully:', CallSid);
         }
 
         // Log call event
@@ -180,6 +224,8 @@ serve(async (req) => {
         break;
 
       case 'recording':
+        console.log('=== RECORDING PROCESSING ===');
+        
         // Handle recording completion
         if (RecordingUrl) {
           const { data: call } = await supabase
@@ -209,8 +255,10 @@ serve(async (req) => {
     });
 
   } catch (error) {
-    console.error('Webhook error:', error);
-    return new Response('<?xml version="1.0" encoding="UTF-8"?><Response></Response>', {
+    console.error('=== WEBHOOK ERROR ===');
+    console.error('Error details:', error);
+    
+    return new Response('<?xml version="1.0" encoding="UTF-8"?><Response><Say>Service temporarily unavailable. Please try again later.</Say></Response>', {
       status: 500,
       headers: { 'Content-Type': 'text/xml' }
     });

@@ -239,7 +239,7 @@ const AISettingsPage = () => {
       voice_id: formData.voice_id,
       language: formData.language,
       transfer_number: formData.transfer_number,
-      custom_greeting: formData.custom_greeting, // Updated field name
+      custom_greeting: formData.custom_greeting,
       voice_enabled: formData.voice_enabled,
       booking_policy: {
         auto_booking_enabled: formData.auto_booking_enabled,
@@ -250,10 +250,12 @@ const AISettingsPage = () => {
       }
     };
 
+    // Save settings first
     await saveSettingsMutation.mutateAsync(submitData);
     
-    // Build greeting audio after saving settings
-    if (formData.custom_greeting) {
+    // Then build greeting audio if we have a custom greeting
+    if (formData.custom_greeting && formData.voice_enabled) {
+      console.log('Auto-building greeting after settings save...');
       await buildGreetingMutation.mutateAsync();
     }
   };

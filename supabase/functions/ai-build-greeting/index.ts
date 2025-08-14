@@ -12,65 +12,109 @@ serve(async (req) => {
   }
 
   try {
-    const { clinic_id } = await req.json();
-    console.log('Building greeting for clinic:', clinic_id);
+    console.log('=== AI BUILD GREETING START ===');
+    
+    const { clinic_id, custom_greeting, voice_provider, voice_id, voice_model, language } = await req.json();
+    
+    if (!clinic_id) {
+      throw new Error('clinic_id is required');
+    }
+    
+    console.log('Input parameters:', {
+      clinic_id,
+      voice_provider,
+      voice_id,
+      voice_model,
+      language,
+      greeting_length: custom_greeting?.length || 0
+    });
 
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
-    // Get AI settings for the clinic
-    const { data: aiSettings, error: settingsError } = await supabase
-      .from('ai_settings')
-      .select('*')
-      .eq('clinic_id', clinic_id)
-      .single();
+    // If no parameters provided, fetch from ai_settings
+    let finalSettings;
+    if (!voice_provider || !voice_id || !custom_greeting) {
+      console.log('Fetching AI settings from database...');
+      const { data: aiSettings, error: settingsError } = await supabase
+        .from('ai_settings')
+        .select('voice_provider, voice_id, voice_model, language, custom_greeting')
+        .eq('clinic_id', clinic_id)
+        .single();
 
-    if (settingsError || !aiSettings) {
-      console.error('Error fetching AI settings:', settingsError);
-      throw new Error('AI settings not found');
+      if (settingsError || !aiSettings) {
+        console.error('Error fetching AI settings:', settingsError);
+        throw new Error('AI settings not found for clinic');
+      }
+
+      finalSettings = {
+        voice_provider: voice_provider || aiSettings.voice_provider || 'elevenlabs',
+        voice_id: voice_id || aiSettings.voice_id || 'sIak7pFapfSLCfctxdOu',
+        voice_model: voice_model || aiSettings.voice_model || 'eleven_multilingual_v2',
+        language: language || aiSettings.language || 'en',
+        custom_greeting: custom_greeting || aiSettings.custom_greeting || 'Hello, my name is Clarice from Family Dental, how may I help you?'
+      };
+    } else {
+      finalSettings = { voice_provider, voice_id, voice_model, language, custom_greeting };
     }
 
-    console.log('AI Settings loaded:', aiSettings);
+    console.log('Final settings for TTS:', finalSettings);
 
-    const greeting = aiSettings.custom_greeting || 'Hello, my name is Clarice from Family Dental, how may I help you?';
-    const voiceId = aiSettings.voice_id || 'sIak7pFapfSLCfctxdOu';
-    const voiceModel = aiSettings.voice_model || 'eleven_multilingual_v2';
+    // Only proceed if we have ElevenLabs as provider
+    if (finalSettings.voice_provider !== 'elevenlabs') {
+      console.log('Skipping TTS generation - provider is not ElevenLabs');
+      return new Response(JSON.stringify({ 
+        success: false, 
+        error: 'Only ElevenLabs TTS is currently supported' 
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
-    // Call ElevenLabs TTS
-    const elevenlabsResponse = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+    // Call ElevenLabs TTS API
+    console.log('=== ELEVENLABS TTS CALL ===');
+    const elevenlabsResponse = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${finalSettings.voice_id}`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${Deno.env.get('ELEVENLABS_API_KEY')}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        text: greeting,
-        model_id: voiceModel,
+        text: finalSettings.custom_greeting,
+        model_id: finalSettings.voice_model,
         voice_settings: {
           stability: 0.5,
           similarity_boost: 0.75,
-          style: 0.1
+          style: 0.1,
+          use_speaker_boost: true
         }
       }),
     });
 
     if (!elevenlabsResponse.ok) {
-      const error = await elevenlabsResponse.text();
-      console.error('ElevenLabs API error:', error);
-      throw new Error(`ElevenLabs API error: ${error}`);
+      const errorText = await elevenlabsResponse.text();
+      console.error('ElevenLabs API error:', {
+        status: elevenlabsResponse.status,
+        error: errorText
+      });
+      throw new Error(`ElevenLabs API error (${elevenlabsResponse.status}): ${errorText}`);
     }
 
-    console.log('ElevenLabs TTS successful');
+    console.log('✅ ElevenLabs TTS successful');
 
     // Get audio data
     const audioData = await elevenlabsResponse.arrayBuffer();
     const audioBlob = new Uint8Array(audioData);
+    
+    console.log('Audio data size:', audioBlob.length, 'bytes');
 
     // Upload to Supabase Storage
+    console.log('=== STORAGE UPLOAD ===');
     const fileName = `greetings/${clinic_id}.mp3`;
-    const { error: uploadError } = await supabase.storage
+    const { data: uploadData, error: uploadError } = await supabase.storage
       .from('audio')
       .upload(fileName, audioBlob, {
         contentType: 'audio/mpeg',
@@ -82,14 +126,17 @@ serve(async (req) => {
       throw new Error(`Failed to upload audio: ${uploadError.message}`);
     }
 
+    console.log('✅ Audio uploaded to storage:', fileName);
+
     // Get public URL
     const { data: { publicUrl } } = supabase.storage
       .from('audio')
       .getPublicUrl(fileName);
 
-    console.log('Audio uploaded to:', publicUrl);
+    console.log('Public URL generated:', publicUrl);
 
     // Update ai_settings with greeting_audio_url
+    console.log('=== DATABASE UPDATE ===');
     const { error: updateError } = await supabase
       .from('ai_settings')
       .update({ 
@@ -103,22 +150,33 @@ serve(async (req) => {
       throw new Error(`Failed to update settings: ${updateError.message}`);
     }
 
-    console.log('AI settings updated with greeting URL');
+    console.log('✅ AI settings updated with greeting URL');
 
-    return new Response(JSON.stringify({ 
-      success: true, 
+    const result = {
+      success: true,
       greeting_audio_url: publicUrl,
-      voice_id: voiceId,
-      voice_model: voiceModel
-    }), {
+      voice_id: finalSettings.voice_id,
+      voice_model: finalSettings.voice_model,
+      voice_provider: finalSettings.voice_provider,
+      greeting_text: finalSettings.custom_greeting,
+      audio_size_bytes: audioBlob.length
+    };
+
+    console.log('=== BUILD GREETING COMPLETE ===');
+    console.log('Result:', result);
+
+    return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
 
   } catch (error) {
-    console.error('Error in ai-build-greeting:', error);
+    console.error('=== BUILD GREETING ERROR ===');
+    console.error('Error details:', error);
+    
     return new Response(JSON.stringify({ 
       success: false, 
-      error: error.message 
+      error: error.message,
+      timestamp: new Date().toISOString()
     }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
