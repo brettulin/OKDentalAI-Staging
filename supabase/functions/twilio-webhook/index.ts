@@ -107,14 +107,14 @@ serve(async (req) => {
 
         console.log('Creating/updating call record for:', { CallSid, clinic_id });
 
-        // Generate TwiML for AI call handling with ElevenLabs voice
+        // Generate TwiML for AI call handling with simple voice (more reliable)
         const twimlResponse = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Say voice="Polly.Joanna">Hello! I'm your AI dental assistant. How can I help you today?</Say>
-  <Gather action="https://zvpezltqpphvolzgfhme.functions.supabase.co/twilio-elevenlabs-voice" method="POST" timeout="10" input="speech" speechTimeout="auto">
-    <Say voice="Polly.Joanna">Please tell me how I can assist you.</Say>
+  <Say voice="Polly.Joanna-Neural">Hello! I'm your AI dental assistant. How can I help you today?</Say>
+  <Gather action="https://zvpezltqpphvolzgfhme.functions.supabase.co/twilio-simple-voice" method="POST" timeout="10" input="speech" speechTimeout="auto">
+    <Say voice="Polly.Joanna-Neural">Please tell me how I can assist you.</Say>
   </Gather>
-  <Say voice="Polly.Joanna">Thank you for calling. Goodbye!</Say>
+  <Say voice="Polly.Joanna-Neural">Thank you for calling. Goodbye!</Say>
   <Hangup/>
 </Response>`;
 
