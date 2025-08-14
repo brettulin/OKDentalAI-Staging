@@ -154,10 +154,10 @@ serve(async (req) => {
           console.log('✅ Using pre-rendered greeting audio:', aiSettings.greeting_audio_url);
           twimlResponse += `  <Play>${aiSettings.greeting_audio_url}</Play>\n`;
         } else {
-          // Fallback to text greeting
+          // Fallback to text greeting with Polly voice
           const greeting = aiSettings?.custom_greeting || 'Hello, my name is Clarice from Family Dental, how may I help you?';
           console.log('📝 Using text greeting:', greeting.substring(0, 50) + '...');
-          twimlResponse += `  <Say>${greeting}</Say>\n`;
+          twimlResponse += `  <Say voice="Polly.Joanna-Neural">${greeting}</Say>\n`;
         }
 
         // Add gather for voice input - redirect to AI handler
@@ -171,9 +171,11 @@ serve(async (req) => {
         // Log final TwiML and key metrics
         console.log('=== FINAL RESPONSE ===');
         console.log('Generated TwiML length:', twimlResponse.length);
-        console.log('Used greeting audio:', useGreetingAudio);
-        console.log('Clinic ID:', clinic_id);
-        console.log('Matched number:', phoneNumber.e164);
+        console.log('Resolved clinic_id:', clinic_id);
+        console.log('Used greeting:', useGreetingAudio ? 'play' : 'say');
+        if (useGreetingAudio) {
+          console.log('URL:', aiSettings.greeting_audio_url);
+        }
         console.log('TwiML Response:', twimlResponse);
 
         return new Response(twimlResponse, {

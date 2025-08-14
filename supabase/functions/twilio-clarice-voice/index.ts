@@ -49,18 +49,20 @@ serve(async (req) => {
       .single();
 
     if (!call) {
-      const { data: clinic } = await supabase
-        .from('clinics')
-        .select('id')
-        .eq('main_phone', To)
+      // Get clinic from phone_numbers table
+      const { data: phoneNumber } = await supabase
+        .from('phone_numbers')
+        .select('clinic_id')
+        .eq('e164', To)
+        .eq('status', 'active')
         .single();
 
-      if (clinic) {
+      if (phoneNumber) {
         const { data: newCall } = await supabase
           .from('calls')
           .insert({
             twilio_call_sid: CallSid,
-            clinic_id: clinic.id,
+            clinic_id: phoneNumber.clinic_id,
             caller_phone: From,
             status: 'in-progress'
           })
@@ -79,11 +81,11 @@ serve(async (req) => {
       });
     }
 
-    const { data: clinic } = await supabase
-      .from('clinics')
-      .select('name')
-      .eq('id', call.clinic_id)
-      .single();
+    // Get AI settings and clinic info
+    const [{ data: clinic }, { data: aiSettings }] = await Promise.all([
+      supabase.from('clinics').select('name').eq('id', call.clinic_id).single(),
+      supabase.from('ai_settings').select('voice_id').eq('clinic_id', call.clinic_id).single()
+    ]);
 
     const userMessage = SpeechResult || "Hello, I'd like to schedule an appointment.";
     console.log('User said:', userMessage);
@@ -122,19 +124,20 @@ serve(async (req) => {
       console.error('OpenAI API error:', await response.text());
     }
 
-    // Generate speech with ElevenLabs using YOUR clarice voice
-    const clariceVoiceId = 'sIak7pFapfSLCfctxdOu';
-    console.log('Using clarice voice:', clariceVoiceId);
+    // Generate speech with ElevenLabs using voice from settings
+    const voiceId = aiSettings?.voice_id || 'sIak7pFapfSLCfctxdOu';
+    console.log('Using voice:', voiceId);
 
-    const ttsResponse = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${clariceVoiceId}/stream`, {
+    const ttsResponse = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
       method: 'POST',
       headers: {
         'xi-api-key': Deno.env.get('ELEVENLABS_API_KEY'),
-        'Content-Type': 'application/json',
+        'content-type': 'application/json',
+        'accept': 'audio/mpeg'
       },
       body: JSON.stringify({
         text: aiResponse,
-        model_id: 'eleven_turbo_v2_5',
+        model_id: 'eleven_turbo_v2',
         voice_settings: {
           stability: 0.5,
           similarity_boost: 0.8,
@@ -151,9 +154,29 @@ serve(async (req) => {
       const audioBuffer = await ttsResponse.arrayBuffer();
       console.log('Audio buffer size:', audioBuffer.byteLength);
       
-      // Convert to base64
-      const base64Audio = btoa(String.fromCharCode(...new Uint8Array(audioBuffer)));
-      console.log('Generated base64 audio, length:', base64Audio.length);
+      // Generate unique session filename
+      const sessionCounter = Math.floor(Date.now() / 1000);
+      const sessionFileName = `audio/sessions/${CallSid}/${sessionCounter}.mp3`;
+      
+      // Upload to Supabase Storage
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('audio')
+        .upload(sessionFileName, new Uint8Array(audioBuffer), {
+          contentType: 'audio/mpeg',
+          upsert: true
+        });
+
+      if (uploadError) {
+        console.error('Storage upload error:', uploadError);
+        throw new Error('Failed to upload audio');
+      }
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('audio')
+        .getPublicUrl(sessionFileName);
+
+      console.log('Audio uploaded to:', publicUrl);
 
       // Store conversation
       await supabase
@@ -171,10 +194,10 @@ serve(async (req) => {
           }
         ]);
 
-      // Return TwiML with YOUR clarice voice audio
+      // Return TwiML with Play from storage
       const twimlResponse = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Play>data:audio/mpeg;base64,${base64Audio}</Play>
+  <Play>${publicUrl}</Play>
   <Gather action="https://zvpezltqpphvolzgfhme.functions.supabase.co/functions/v1/twilio-clarice-voice" method="POST" timeout="8" input="speech" speechTimeout="auto">
     <Pause length="1"/>
   </Gather>
@@ -182,7 +205,7 @@ serve(async (req) => {
   <Hangup/>
 </Response>`;
 
-      console.log('Returning TwiML with clarice voice audio');
+      console.log('Returning TwiML with voice audio from storage');
       return new Response(twimlResponse, {
         headers: { 'Content-Type': 'text/xml' }
       });

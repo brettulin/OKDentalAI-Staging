@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -602,6 +602,40 @@ const AISettingsPage = () => {
         {formData.voice_enabled && (
           <VoiceLatencyTest />
         )}
+
+        {/* QA Dry Run Test */}
+        <Card>
+          <CardHeader>
+            <CardTitle>QA Dry Run Test</CardTitle>
+            <CardDescription>Test the exact TwiML returned by the webhook</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button
+              onClick={async () => {
+                try {
+                  const formData = new FormData();
+                  formData.append('To', '+14058352486');
+                  formData.append('From', '+15551234567');
+                  formData.append('CallSid', 'CA1234567890abcdef1234567890abcdef');
+                  formData.append('CallStatus', 'ringing');
+                  
+                  const response = await fetch('https://zvpezltqpphvolzgfhme.functions.supabase.co/functions/v1/twilio-webhook', {
+                    method: 'POST',
+                    body: formData
+                  });
+                  
+                  const twiml = await response.text();
+                  alert(`TwiML Response:\n\n${twiml}`);
+                } catch (error) {
+                  alert(`Error: ${error.message}`);
+                }
+              }}
+              variant="outline"
+            >
+              Test Webhook TwiML
+            </Button>
+          </CardContent>
+        </Card>
 
         {/* OpenAI Realtime AI Interface */}
         <Card>

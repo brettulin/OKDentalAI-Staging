@@ -14,6 +14,17 @@ serve(async (req) => {
   try {
     console.log('=== AI BUILD GREETING START ===');
     
+    // Assert ELEVENLABS_API_KEY is present
+    if (!Deno.env.get('ELEVENLABS_API_KEY')) {
+      return new Response(JSON.stringify({ 
+        success: false, 
+        error: 'ELEVENLABS_API_KEY missing' 
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    
     const { clinic_id, custom_greeting, voice_provider, voice_id, voice_model, language } = await req.json();
     
     if (!clinic_id) {
@@ -79,8 +90,9 @@ serve(async (req) => {
     const elevenlabsResponse = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${finalSettings.voice_id}`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${Deno.env.get('ELEVENLABS_API_KEY')}`,
-        'Content-Type': 'application/json',
+        'xi-api-key': Deno.env.get('ELEVENLABS_API_KEY'),
+        'content-type': 'application/json',
+        'accept': 'audio/mpeg'
       },
       body: JSON.stringify({
         text: finalSettings.custom_greeting,
@@ -113,7 +125,7 @@ serve(async (req) => {
 
     // Upload to Supabase Storage
     console.log('=== STORAGE UPLOAD ===');
-    const fileName = `greetings/${clinic_id}.mp3`;
+    const fileName = `audio/greetings/${clinic_id}.mp3`;
     const { data: uploadData, error: uploadError } = await supabase.storage
       .from('audio')
       .upload(fileName, audioBlob, {
@@ -127,6 +139,9 @@ serve(async (req) => {
     }
 
     console.log('✅ Audio uploaded to storage:', fileName);
+    console.log('Voice ID:', finalSettings.voice_id);
+    console.log('Model ID:', finalSettings.voice_model);
+    console.log('Storage path:', fileName);
 
     // Get public URL
     const { data: { publicUrl } } = supabase.storage
