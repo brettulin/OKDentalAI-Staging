@@ -15,6 +15,7 @@ serve(async (req) => {
     return new Response("Expected WebSocket connection", { status: 400 });
   }
 
+  console.log('WebSocket connection attempt');
   const { socket, response } = Deno.upgradeWebSocket(req);
   
   const supabase = createClient(
@@ -25,16 +26,17 @@ serve(async (req) => {
   let callSid: string | null = null;
   let clinicId: string | null = null;
   let callId: string | null = null;
-  let openaiWs: WebSocket | null = null;
+  let streamSid: string | null = null;
+  let clariceVoiceId = 'sIak7pFapfSLCfctxdOu'; // Your custom clarice voice
 
   socket.onopen = () => {
-    console.log('Twilio WebSocket connected');
+    console.log('Twilio WebSocket connected successfully');
   };
 
   socket.onmessage = async (event) => {
     try {
       const message = JSON.parse(event.data);
-      console.log('Received from Twilio:', message);
+      console.log('Received from Twilio:', message.event);
 
       switch (message.event) {
         case 'connected':
@@ -43,6 +45,7 @@ serve(async (req) => {
 
         case 'start':
           callSid = message.start.callSid;
+          streamSid = message.start.streamSid;
           const fromNumber = message.start.customParameters?.From;
           const toNumber = message.start.customParameters?.To;
           
@@ -57,6 +60,7 @@ serve(async (req) => {
 
           if (clinic) {
             clinicId = clinic.id;
+            console.log('Found clinic:', clinic.name);
             
             // Create call record
             const { data: call } = await supabase
@@ -72,120 +76,27 @@ serve(async (req) => {
               
             if (call) {
               callId = call.id;
+              console.log('Created call record:', callId);
             }
 
-            // Get AI settings for voice
-            const { data: aiSettings } = await supabase
-              .from('ai_settings')
-              .select('*')
-              .eq('clinic_id', clinicId)
-              .single();
-
-            // Connect to OpenAI Realtime API
-            openaiWs = new WebSocket("wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-12-17", {
-              headers: {
-                "Authorization": `Bearer ${Deno.env.get('OPENAI_API_KEY')}`,
-                "OpenAI-Beta": "realtime=v1"
-              }
-            });
-
-            openaiWs.onopen = () => {
-              console.log('Connected to OpenAI Realtime API');
-              
-              // Configure session for dental assistant
-              openaiWs?.send(JSON.stringify({
-                type: "session.update",
-                session: {
-                  modalities: ["text", "audio"],
-                  instructions: `You are a helpful AI dental receptionist for ${clinic.name}. Keep responses very brief (1 sentence). Help with appointments, questions, and messages. Be friendly and efficient.`,
-                  voice: "alloy",
-                  input_audio_format: "pcm16",
-                  output_audio_format: "pcm16",
-                  input_audio_transcription: {
-                    model: "whisper-1"
-                  },
-                  turn_detection: {
-                    type: "server_vad",
-                    threshold: 0.5,
-                    prefix_padding_ms: 300,
-                    silence_duration_ms: 500
-                  },
-                  temperature: 0.6,
-                  max_response_output_tokens: 150
-                }
-              }));
-            };
-
-            openaiWs.onmessage = async (event) => {
-              const data = JSON.parse(event.data);
-              console.log('OpenAI message:', data.type);
-
-              if (data.type === 'response.audio.delta') {
-                // Convert PCM to mu-law for Twilio
-                const pcmData = atob(data.delta);
-                const audioBytes = new Uint8Array(pcmData.length);
-                for (let i = 0; i < pcmData.length; i++) {
-                  audioBytes[i] = pcmData.charCodeAt(i);
-                }
-
-                // Send audio to Twilio
-                socket.send(JSON.stringify({
-                  event: 'media',
-                  streamSid: message.start.streamSid,
-                  media: {
-                    payload: btoa(String.fromCharCode(...audioBytes))
-                  }
-                }));
-              }
-
-              if (data.type === 'response.audio_transcript.done') {
-                console.log('AI said:', data.transcript);
-                
-                // Store in database
-                if (callId) {
-                  await supabase
-                    .from('turns')
-                    .insert({
-                      call_id: callId,
-                      role: 'assistant',
-                      text: data.transcript
-                    });
-                }
-              }
-
-              if (data.type === 'conversation.item.input_audio_transcription.completed') {
-                console.log('User said:', data.transcript);
-                
-                // Store in database
-                if (callId) {
-                  await supabase
-                    .from('turns')
-                    .insert({
-                      call_id: callId,
-                      role: 'user',
-                      text: data.transcript
-                    });
-                }
-              }
-            };
+            // Send initial greeting with your clarice voice
+            await sendClariceVoiceResponse(
+              `Hello! I'm your AI dental assistant at ${clinic.name}. How can I help you today?`,
+              streamSid,
+              socket
+            );
           }
           break;
 
         case 'media':
-          // Forward audio to OpenAI
-          if (openaiWs && openaiWs.readyState === WebSocket.OPEN) {
-            openaiWs.send(JSON.stringify({
-              type: "input_audio_buffer.append",
-              audio: message.media.payload
-            }));
+          // Process incoming audio and generate AI response
+          if (streamSid) {
+            await processAudioAndRespond(message.media.payload, streamSid, socket, clinicId, callId);
           }
           break;
 
         case 'stop':
           console.log('Media stream stopped');
-          if (openaiWs) {
-            openaiWs.close();
-          }
           
           // Update call status
           if (callId) {
@@ -206,10 +117,164 @@ serve(async (req) => {
 
   socket.onclose = () => {
     console.log('Twilio WebSocket disconnected');
-    if (openaiWs) {
-      openaiWs.close();
-    }
   };
+
+  // Function to send Clarice voice response
+  async function sendClariceVoiceResponse(text: string, streamSid: string, socket: WebSocket) {
+    try {
+      console.log('Generating Clarice voice for:', text);
+      
+      // Generate speech with ElevenLabs using your clarice voice
+      const ttsResponse = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${clariceVoiceId}`, {
+        method: 'POST',
+        headers: {
+          'xi-api-key': Deno.env.get('ELEVENLABS_API_KEY'),
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          text: text,
+          model_id: 'eleven_turbo_v2_5', // Fastest model
+          voice_settings: {
+            stability: 0.4,
+            similarity_boost: 0.8,
+            style: 0.0,
+            use_speaker_boost: false
+          },
+          output_format: "pcm_16000" // PCM format for Twilio
+        }),
+      });
+
+      if (ttsResponse.ok) {
+        const audioBuffer = await ttsResponse.arrayBuffer();
+        const audioBytes = new Uint8Array(audioBuffer);
+        
+        // Convert to base64 and send to Twilio
+        const base64Audio = btoa(String.fromCharCode(...audioBytes));
+        
+        socket.send(JSON.stringify({
+          event: 'media',
+          streamSid: streamSid,
+          media: {
+            payload: base64Audio
+          }
+        }));
+        
+        console.log('Sent Clarice voice audio to Twilio');
+      } else {
+        console.error('ElevenLabs TTS error:', await ttsResponse.text());
+      }
+    } catch (error) {
+      console.error('Error generating Clarice voice:', error);
+    }
+  }
+
+  // Function to process audio and respond
+  async function processAudioAndRespond(audioPayload: string, streamSid: string, socket: WebSocket, clinicId: string | null, callId: string | null) {
+    try {
+      // Transcribe audio using OpenAI Whisper
+      const audioData = atob(audioPayload);
+      const audioBytes = new Uint8Array(audioData.length);
+      for (let i = 0; i < audioData.length; i++) {
+        audioBytes[i] = audioData.charCodeAt(i);
+      }
+
+      const formData = new FormData();
+      formData.append('file', new Blob([audioBytes], { type: 'audio/wav' }), 'audio.wav');
+      formData.append('model', 'whisper-1');
+
+      const transcriptionResponse = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${Deno.env.get('OPENAI_API_KEY')}`,
+        },
+        body: formData,
+      });
+
+      if (transcriptionResponse.ok) {
+        const transcription = await transcriptionResponse.json();
+        const userText = transcription.text;
+        
+        if (userText && userText.trim().length > 2) {
+          console.log('User said:', userText);
+          
+          // Store user message
+          if (callId) {
+            await supabase
+              .from('turns')
+              .insert({
+                call_id: callId,
+                role: 'user',
+                text: userText
+              });
+          }
+
+          // Generate AI response
+          const aiResponse = await generateAIResponse(userText, clinicId);
+          
+          // Store AI response
+          if (callId) {
+            await supabase
+              .from('turns')
+              .insert({
+                call_id: callId,
+                role: 'assistant',
+                text: aiResponse
+              });
+          }
+
+          // Send Clarice voice response
+          await sendClariceVoiceResponse(aiResponse, streamSid, socket);
+        }
+      }
+    } catch (error) {
+      console.error('Error processing audio:', error);
+    }
+  }
+
+  // Function to generate AI response
+  async function generateAIResponse(userText: string, clinicId: string | null): Promise<string> {
+    try {
+      const { data: clinic } = clinicId ? await supabase
+        .from('clinics')
+        .select('name')
+        .eq('id', clinicId)
+        .single() : { data: null };
+
+      const systemPrompt = `You are an AI dental receptionist for ${clinic?.name || 'our dental clinic'}. 
+      Respond in exactly 1 sentence. Be direct and helpful.
+      Help with: appointments, questions, messages.`;
+
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${Deno.env.get('OPENAI_API_KEY')}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userText }
+          ],
+          max_tokens: 50,
+          temperature: 0.5,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const aiResponse = data.choices[0]?.message?.content || "How can I help you today?";
+        console.log('AI Response:', aiResponse);
+        return aiResponse;
+      } else {
+        console.error('OpenAI API error:', await response.text());
+        return "How can I help you today?";
+      }
+    } catch (error) {
+      console.error('Error generating AI response:', error);
+      return "How can I help you today?";
+    }
+  }
 
   return response;
 });

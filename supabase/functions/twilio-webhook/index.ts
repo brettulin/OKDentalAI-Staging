@@ -111,7 +111,7 @@ serve(async (req) => {
         const twimlResponse = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Connect>
-    <Stream url="wss://zvpezltqpphvolzgfhme.functions.supabase.co/functions/v1/twilio-realtime-voice" />
+    <Stream url="wss://zvpezltqpphvolzgfhme.supabase.co/functions/v1/twilio-realtime-voice" />
   </Connect>
 </Response>`;
 
