@@ -94,14 +94,10 @@ serve(async (req) => {
 
     const userMessage = SpeechResult || "Hello, I'd like to schedule an appointment.";
     
-    // Generate AI response using faster model
-    const systemPrompt = `You are a helpful AI dental receptionist for ${clinic?.name || 'our dental clinic'}. 
-    Keep responses very brief (1-2 sentences max) and professional. Help with:
-    - Scheduling appointments 
-    - Basic questions about services
-    - Taking messages
-    
-    Always be conversational and ask follow-up questions to keep the call flowing.`;
+    // Generate AI response using faster model with very short responses
+    const systemPrompt = `You are an AI dental receptionist for ${clinic?.name || 'our dental clinic'}. 
+    Respond in exactly 1 sentence. Be direct and helpful.
+    Help with: appointments, questions, messages.`;
 
     console.log('Generating AI response for:', userMessage);
 
@@ -112,13 +108,13 @@ serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini', // Faster model
+        model: 'gpt-4o-mini',
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userMessage }
         ],
-        max_tokens: 100, // Shorter responses for speed
-        temperature: 0.7,
+        max_tokens: 50, // Very short for speed
+        temperature: 0.5,
       }),
     });
 
@@ -132,10 +128,11 @@ serve(async (req) => {
       console.error('OpenAI API error:', await response.text());
     }
 
-    // Generate speech with ElevenLabs using custom voice
-    const voiceId = aiSettings?.voice_id || 'sIak7pFapfSLCfctxdOu'; // Default to clarice
-    console.log('Using ElevenLabs voice:', voiceId);
+    // Force use of clarice voice
+    const voiceId = 'sIak7pFapfSLCfctxdOu'; // clarice voice ID
+    console.log('Using ElevenLabs clarice voice:', voiceId);
 
+    console.log('Calling ElevenLabs TTS with text:', aiResponse);
     const ttsResponse = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
       method: 'POST',
       headers: {
@@ -144,13 +141,14 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         text: aiResponse,
-        model_id: 'eleven_turbo_v2', // Fastest model
+        model_id: 'eleven_turbo_v2_5', // Fastest model for lowest latency
         voice_settings: {
-          stability: 0.5,
-          similarity_boost: 0.75,
+          stability: 0.4,
+          similarity_boost: 0.8,
           style: 0.0,
-          use_speaker_boost: true
-        }
+          use_speaker_boost: false // Disable for speed
+        },
+        output_format: "mp3_22050_32" // Lower quality for speed
       }),
     });
 
@@ -163,7 +161,7 @@ serve(async (req) => {
       return new Response(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Say voice="Polly.Joanna">${aiResponse}</Say>
-  <Gather action="https://zvpezltqpphvolzgfhme.functions.supabase.co/twilio-elevenlabs-voice" method="POST" timeout="5" input="speech" speechTimeout="auto">
+  <Gather action="https://zvpezltqpphvolzgfhme.functions.supabase.co/functions/v1/twilio-elevenlabs-voice" method="POST" timeout="5" input="speech" speechTimeout="auto">
     <Say voice="Polly.Joanna">Please let me know if you need anything else.</Say>
   </Gather>
   <Say voice="Polly.Joanna">Thank you for calling. Goodbye!</Say>
@@ -183,7 +181,7 @@ serve(async (req) => {
       return new Response(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Say voice="Polly.Joanna">${aiResponse}</Say>
-  <Gather action="https://zvpezltqpphvolzgfhme.functions.supabase.co/twilio-elevenlabs-voice" method="POST" timeout="5" input="speech" speechTimeout="auto">
+  <Gather action="https://zvpezltqpphvolzgfhme.functions.supabase.co/functions/v1/twilio-elevenlabs-voice" method="POST" timeout="5" input="speech" speechTimeout="auto">
     <Say voice="Polly.Joanna">Please let me know if you need anything else.</Say>
   </Gather>
   <Say voice="Polly.Joanna">Thank you for calling. Goodbye!</Say>
@@ -212,18 +210,18 @@ serve(async (req) => {
         }
       ]);
 
-    // Return TwiML with audio playbook using proper data URI format
+    // Return TwiML with audio and faster timeouts
     const twimlResponse = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Play>data:audio/mpeg;base64,${base64Audio}</Play>
-  <Gather action="https://zvpezltqpphvolzgfhme.functions.supabase.co/twilio-elevenlabs-voice" method="POST" timeout="10" input="speech" speechTimeout="auto">
-    <Say voice="Polly.Joanna">How else can I help you?</Say>
+  <Gather action="https://zvpezltqpphvolzgfhme.functions.supabase.co/functions/v1/twilio-elevenlabs-voice" method="POST" timeout="5" input="speech" speechTimeout="2">
+    <Pause length="0.5"/>
   </Gather>
-  <Say voice="Polly.Joanna">Thank you for calling. Have a great day!</Say>
+  <Say voice="Polly.Joanna-Neural">Thank you for calling!</Say>
   <Hangup/>
 </Response>`;
 
-    console.log('Returning TwiML response with audio');
+    console.log('Returning TwiML with clarice voice audio');
 
     return new Response(twimlResponse, {
       headers: { 'Content-Type': 'text/xml' }
