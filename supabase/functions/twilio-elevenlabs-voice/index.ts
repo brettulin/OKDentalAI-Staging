@@ -154,9 +154,12 @@ serve(async (req) => {
       }),
     });
 
+    console.log('ElevenLabs TTS Response Status:', ttsResponse.status);
+    
     if (!ttsResponse.ok) {
-      console.error('ElevenLabs TTS error:', await ttsResponse.text());
-      // Fallback to Twilio's built-in voice
+      const errorText = await ttsResponse.text();
+      console.error('ElevenLabs TTS error:', errorText);
+      // Fallback to simple TwiML without custom audio
       return new Response(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Say voice="Polly.Joanna">${aiResponse}</Say>
@@ -172,7 +175,26 @@ serve(async (req) => {
 
     // Convert audio to base64 for Twilio
     const audioBuffer = await ttsResponse.arrayBuffer();
+    console.log('Audio buffer size:', audioBuffer.byteLength);
+    
+    if (audioBuffer.byteLength === 0) {
+      console.error('Empty audio buffer received from ElevenLabs');
+      // Use fallback voice
+      return new Response(`<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="Polly.Joanna">${aiResponse}</Say>
+  <Gather action="https://zvpezltqpphvolzgfhme.functions.supabase.co/twilio-elevenlabs-voice" method="POST" timeout="5" input="speech" speechTimeout="auto">
+    <Say voice="Polly.Joanna">Please let me know if you need anything else.</Say>
+  </Gather>
+  <Say voice="Polly.Joanna">Thank you for calling. Goodbye!</Say>
+  <Hangup/>
+</Response>`, {
+        headers: { 'Content-Type': 'text/xml' }
+      });
+    }
+
     const base64Audio = btoa(String.fromCharCode(...new Uint8Array(audioBuffer)));
+    console.log('Generated base64 audio length:', base64Audio.length);
 
     // Store conversation
     await supabase
@@ -190,16 +212,18 @@ serve(async (req) => {
         }
       ]);
 
-    // Return TwiML with audio playback
+    // Return TwiML with audio playbook using proper data URI format
     const twimlResponse = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Play>data:audio/mpeg;base64,${base64Audio}</Play>
-  <Gather action="https://zvpezltqpphvolzgfhme.functions.supabase.co/twilio-elevenlabs-voice" method="POST" timeout="5" input="speech" speechTimeout="auto">
-    <Pause length="1"/>
+  <Gather action="https://zvpezltqpphvolzgfhme.functions.supabase.co/twilio-elevenlabs-voice" method="POST" timeout="10" input="speech" speechTimeout="auto">
+    <Say voice="Polly.Joanna">How else can I help you?</Say>
   </Gather>
   <Say voice="Polly.Joanna">Thank you for calling. Have a great day!</Say>
   <Hangup/>
 </Response>`;
+
+    console.log('Returning TwiML response with audio');
 
     return new Response(twimlResponse, {
       headers: { 'Content-Type': 'text/xml' }
