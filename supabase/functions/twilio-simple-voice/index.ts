@@ -143,7 +143,7 @@ serve(async (req) => {
     const twimlResponse = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Say voice="Polly.Joanna-Neural">${aiResponse}</Say>
-  <Gather action="https://zvpezltqpphvolzgfhme.functions.supabase.co/twilio-simple-voice" method="POST" timeout="8" input="speech" speechTimeout="auto">
+  <Gather action="https://zvpezltqpphvolzgfhme.functions.supabase.co/functions/v1/twilio-simple-voice" method="POST" timeout="8" input="speech" speechTimeout="auto">
     <Say voice="Polly.Joanna-Neural">How else can I help you?</Say>
   </Gather>
   <Say voice="Polly.Joanna-Neural">Thank you for calling. Have a wonderful day!</Say>
