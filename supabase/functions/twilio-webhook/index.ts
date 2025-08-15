@@ -147,7 +147,7 @@ serve(async (req) => {
         console.log('=== TWIML GENERATION ===');
         let twimlResponse;
 
-        const useGreetingAudio = aiSettings?.greeting_audio_url && aiSettings?.voice_enabled;
+        const useGreetingAudio = aiSettings?.greeting_audio_url && aiSettings?.voice_enabled !== false;
         
         if (useGreetingAudio) {
           // Use pre-rendered greeting audio - NO extra <Say> elements
@@ -171,11 +171,19 @@ serve(async (req) => {
         }
 
         // Log final TwiML and key metrics
+        console.log('=== FINAL TWIML DECISION ===');
+        console.log('Greeting audio URL:', aiSettings?.greeting_audio_url);
+        console.log('Voice enabled:', aiSettings?.voice_enabled);
+        console.log('Use greeting audio:', useGreetingAudio);
+        console.log('TwiML length:', twimlResponse.length);
+        
         console.log(JSON.stringify({
           tag: "twilio-webhook:twiml",
           clinic_id,
           used_greeting: useGreetingAudio ? "play" : "say",
           greeting_url: useGreetingAudio ? aiSettings.greeting_audio_url : null,
+          voice_enabled: aiSettings?.voice_enabled,
+          has_audio_url: !!aiSettings?.greeting_audio_url,
           url: req.url
         }));
 
