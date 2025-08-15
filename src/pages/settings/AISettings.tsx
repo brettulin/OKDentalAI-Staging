@@ -615,16 +615,17 @@ const AISettingsPage = () => {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              <Button
-                onClick={async () => {
-                  try {
-                    const { data, error } = await supabase.functions.invoke('diag-greeting', {
-                      body: { To: '+14058352486' }
-                    });
-                    
-                    if (error) throw error;
-                    
-                    const result = `CLINIC RESOLUTION:
+              <div className="flex gap-2">
+                <Button
+                  onClick={async () => {
+                    try {
+                      const { data, error } = await supabase.functions.invoke('diag-greeting', {
+                        body: { To: '+14058352486' }
+                      });
+                      
+                      if (error) throw error;
+                      
+                      const result = `CLINIC RESOLUTION:
 - Clinic ID: ${data.clinic_id}
 - Phone Number: ${data.number}
 - Voice ID: ${data.voice_id}
@@ -634,17 +635,37 @@ const AISettingsPage = () => {
 TWIML PREVIEW:
 ${data.twiml_preview}`;
 
-                    alert(result);
-                  } catch (error) {
-                    alert(`Error: ${error.message}`);
-                  }
-                }}
-                variant="outline"
-                className="flex items-center gap-2"
-              >
-                <Play className="h-4 w-4" />
-                Test Greeting (Dry Run)
-              </Button>
+                      alert(result);
+                    } catch (error) {
+                      alert(`Error: ${error.message}`);
+                    }
+                  }}
+                  variant="outline"
+                  className="flex items-center gap-2"
+                >
+                  <Play className="h-4 w-4" />
+                  Test Greeting (Dry Run)
+                </Button>
+                
+                <Button
+                  onClick={async () => {
+                    try {
+                      const { data, error } = await supabase.functions.invoke('test-greeting-manual');
+                      
+                      if (error) throw error;
+                      
+                      alert(`Manual Test Result:\nSuccess: ${data.success}\nBuild Result: ${JSON.stringify(data.buildGreetingResult, null, 2)}\nCurrent Settings: ${JSON.stringify(data.currentSettings, null, 2)}`);
+                    } catch (error) {
+                      alert(`Manual Test Error: ${error.message}`);
+                    }
+                  }}
+                  variant="destructive"
+                  className="flex items-center gap-2"
+                >
+                  <Play className="h-4 w-4" />
+                  Manual Test
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>

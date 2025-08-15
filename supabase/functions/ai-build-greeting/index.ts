@@ -13,9 +13,16 @@ serve(async (req) => {
 
   try {
     console.log('=== AI BUILD GREETING START ===');
+    console.log('Request method:', req.method);
+    console.log('Request headers:', Object.fromEntries(req.headers.entries()));
     
     // Assert ELEVENLABS_API_KEY is present
-    if (!Deno.env.get('ELEVENLABS_API_KEY')) {
+    const elevenLabsKey = Deno.env.get('ELEVENLABS_API_KEY');
+    console.log('ElevenLabs API Key present:', !!elevenLabsKey);
+    console.log('ElevenLabs API Key length:', elevenLabsKey?.length || 0);
+    
+    if (!elevenLabsKey) {
+      console.error('ELEVENLABS_API_KEY is missing!');
       return new Response(JSON.stringify({ 
         success: false, 
         error: 'ELEVENLABS_API_KEY missing' 
@@ -25,9 +32,13 @@ serve(async (req) => {
       });
     }
     
-    const { clinic_id, custom_greeting, voice_provider, voice_id, voice_model, language } = await req.json();
+    const requestBody = await req.json();
+    console.log('Request body:', requestBody);
+    
+    const { clinic_id, custom_greeting, voice_provider, voice_id, voice_model, language } = requestBody;
     
     if (!clinic_id) {
+      console.error('clinic_id is missing!');
       throw new Error('clinic_id is required');
     }
     
@@ -178,7 +189,7 @@ serve(async (req) => {
     };
 
     console.log('=== BUILD GREETING COMPLETE ===');
-    console.log('Result:', result);
+    console.log('Final result:', result);
 
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -186,11 +197,16 @@ serve(async (req) => {
 
   } catch (error) {
     console.error('=== BUILD GREETING ERROR ===');
-    console.error('Error details:', error);
+    console.error('Error type:', typeof error);
+    console.error('Error name:', error.name);
+    console.error('Error message:', error.message);
+    console.error('Error stack:', error.stack);
+    console.error('Full error object:', error);
     
     return new Response(JSON.stringify({ 
       success: false, 
       error: error.message,
+      error_type: error.name,
       timestamp: new Date().toISOString()
     }), {
       status: 500,
