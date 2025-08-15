@@ -25,7 +25,18 @@ serve(async (req) => {
       console.error('ELEVENLABS_API_KEY is missing!');
       return new Response(JSON.stringify({ 
         success: false, 
-        error: 'ELEVENLABS_API_KEY missing' 
+        error: 'ELEVENLABS_API_KEY missing - please add it in Supabase secrets' 
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    
+    if (elevenLabsKey.length < 30) {
+      console.error('ELEVENLABS_API_KEY appears invalid - too short');
+      return new Response(JSON.stringify({ 
+        success: false, 
+        error: 'ELEVENLABS_API_KEY appears invalid - please check the secret' 
       }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

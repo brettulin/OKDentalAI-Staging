@@ -19,10 +19,30 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
 
+    // Get the actual clinic_id from the request headers
+    const authHeader = req.headers.get('authorization');
+    if (!authHeader) {
+      throw new Error('No authorization header');
+    }
+
+    // Get user's clinic_id
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('clinic_id')
+      .eq('user_id', (await supabase.auth.getUser(authHeader.replace('Bearer ', ''))).data.user?.id)
+      .single();
+
+    if (profileError || !profile?.clinic_id) {
+      throw new Error('Could not get clinic_id for user');
+    }
+
+    console.log('Using clinic_id:', profile.clinic_id);
+
     // Test calling ai-build-greeting directly
     console.log('Calling ai-build-greeting function...');
     const { data, error } = await supabase.functions.invoke('ai-build-greeting', {
-      body: { clinic_id: '550e8400-e29b-41d4-a716-446655440020' }
+      body: { clinic_id: profile.clinic_id },
+      headers: { authorization: authHeader }
     });
 
     console.log('ai-build-greeting response:', { data, error });
@@ -43,7 +63,7 @@ serve(async (req) => {
     const { data: currentSettings, error: settingsError } = await supabase
       .from('ai_settings')
       .select('*')
-      .eq('clinic_id', '550e8400-e29b-41d4-a716-446655440020')
+      .eq('clinic_id', profile.clinic_id)
       .single();
 
     console.log('Current ai_settings:', currentSettings);
