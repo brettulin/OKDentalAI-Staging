@@ -109,10 +109,13 @@ serve(async (req) => {
 
     // Call ElevenLabs TTS API
     console.log('=== ELEVENLABS TTS CALL ===');
+    console.log('Using voice_id:', finalSettings.voice_id);
+    console.log('Using text:', finalSettings.custom_greeting);
+    
     const elevenlabsResponse = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${finalSettings.voice_id}`, {
       method: 'POST',
       headers: {
-        'xi-api-key': Deno.env.get('ELEVENLABS_API_KEY'),
+        'xi-api-key': elevenLabsKey,
         'content-type': 'application/json',
         'accept': 'audio/mpeg'
       },
