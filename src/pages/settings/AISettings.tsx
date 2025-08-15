@@ -455,12 +455,16 @@ const AISettingsPage = () => {
                   <strong>Preview:</strong> {testGreeting}
                 </div>
               )}
-              {settings?.greeting_audio_url && (
+              {settings?.greeting_audio_url ? (
                 <div className="mt-2 p-3 bg-green-50 dark:bg-green-900/20 rounded-lg text-sm">
-                  <strong>✓ Greeting audio ready:</strong> 
+                  <strong>✓ Greeting audio ready:</strong> Clarice will greet callers with pre-rendered audio
                   <audio controls className="mt-1 w-full">
                     <source src={settings.greeting_audio_url} type="audio/mpeg" />
                   </audio>
+                </div>
+              ) : (
+                <div className="mt-2 p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg text-sm">
+                  <strong>⚠ No greeting audio:</strong> Will use text-to-speech fallback (not Clarice's voice)
                 </div>
               )}
             </div>
