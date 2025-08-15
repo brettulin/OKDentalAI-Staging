@@ -39,28 +39,13 @@ serve(async (req) => {
       throw new Error('No CallSid provided');
     }
 
-    // OPTIMIZATION: Parallel DB queries to reduce latency
-    const [phoneNumberResult, aiSettingsResult] = await Promise.all([
-      supabase
-        .from('phone_numbers')
-        .select('clinic_id')
-        .eq('e164', To)
-        .eq('status', 'active')
-        .single(),
-      // Pre-fetch ai_settings in parallel using a join query
-      supabase
-        .from('phone_numbers')
-        .select(`
-          clinic_id,
-          ai_settings!inner(voice_id, voice_model)
-        `)
-        .eq('e164', To)
-        .eq('status', 'active')
-        .single()
-    ]);
-
-    const { data: phoneNumber } = phoneNumberResult;
-    const { data: phoneWithSettings } = aiSettingsResult;
+    // Get clinic_id from phone_numbers
+    const { data: phoneNumber } = await supabase
+      .from('phone_numbers')
+      .select('clinic_id')
+      .eq('e164', To)
+      .eq('status', 'active')
+      .single();
 
     if (!phoneNumber) {
       console.error('No active phone number found for:', To);
@@ -69,38 +54,42 @@ serve(async (req) => {
       });
     }
 
+    // Get voice_id from ai_settings
+    const { data: aiSettings } = await supabase
+      .from('ai_settings')
+      .select('voice_id')
+      .eq('clinic_id', phoneNumber.clinic_id)
+      .single();
+
     const userMessage = SpeechResult || "Hello, I'd like to schedule an appointment.";
     
     // Use voice_id from settings, fallback to Clarice
-    const voiceId = phoneWithSettings?.ai_settings?.voice_id || 'sIak7pFapfSLCfctxdOu';
+    const voiceId = aiSettings?.voice_id || 'sIak7pFapfSLCfctxdOu';
     
-    // OPTIMIZATION: Parallel AI and TTS preparation
-    const systemPrompt = `Clarice, dental receptionist. Be helpful, brief.`;
+    // Generate SHORT AI response
+    const systemPrompt = `You are Clarice, dental receptionist. Reply in 1 short sentence.`;
 
-    // Start AI generation and prepare TTS settings in parallel
-    const [aiResponseResult] = await Promise.all([
-      fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${Deno.env.get('OPENAI_API_KEY')}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'gpt-4o-mini',
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userMessage }
-          ],
-          max_tokens: 15, // OPTIMIZATION: Reduced tokens for faster response
-          temperature: 0.3, // OPTIMIZATION: Lower temperature for faster processing
-        }),
-      })
-    ]);
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${Deno.env.get('OPENAI_API_KEY')}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userMessage }
+        ],
+        max_tokens: 20, // OPTIMIZATION: Keep reduced tokens
+        temperature: 0.3,
+      }),
+    });
 
     let aiResponse = "How can I help you today?";
     
-    if (aiResponseResult.ok) {
-      const data = await aiResponseResult.json();
+    if (response.ok) {
+      const data = await response.json();
       aiResponse = data.choices[0]?.message?.content || aiResponse;
     }
 
@@ -114,7 +103,7 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         text: aiResponse,
-        model_id: 'eleven_turbo_v2_5', // OPTIMIZATION: Faster model
+        model_id: 'eleven_turbo_v2_5', // OPTIMIZATION: Keep faster model
         output_format: 'mp3_22050_32',
         voice_settings: {
           stability: 0.5,
@@ -129,26 +118,41 @@ serve(async (req) => {
 
     if (ttsResponse.ok) {
       const audioBuffer = await ttsResponse.arrayBuffer();
+      const sessionFileName = `audio/sessions/${CallSid}/${Date.now()}.mp3`;
       
-      // OPTIMIZATION: Return audio directly as base64 - eliminates storage upload latency
-      const base64Audio = btoa(String.fromCharCode(...new Uint8Array(audioBuffer)));
-      
-      const t2 = Date.now(); // base64_done
+      // Back to storage upload for compatibility
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('audio')
+        .upload(sessionFileName, new Uint8Array(audioBuffer), {
+          contentType: 'audio/mpeg',
+          upsert: true
+        });
 
-      // Log optimized timing
+      if (uploadError) {
+        console.error('Upload error:', uploadError);
+        throw new Error('Failed to upload audio');
+      }
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('audio')
+        .getPublicUrl(sessionFileName);
+
+      const t2 = Date.now(); // upload_done
+
+      // Log timing with optimization tag
       console.log(JSON.stringify({
         tag: "twilio-clarice-voice:timing-optimized",
         CallSid, 
         tts_ms: t1-t0, 
-        base64_ms: t2-t1, 
+        upload_ms: t2-t1, 
         total_ms: t2-t0,
-        optimization: "direct_base64_no_upload"
+        model: "eleven_turbo_v2_5"
       }));
 
-      // Return TwiML with base64 audio directly
+      // Return TwiML with Play URL
       return new Response(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Play>data:audio/mpeg;base64,${base64Audio}</Play>
+  <Play>${publicUrl}</Play>
   <Gather action="https://zvpezltqpphvolzgfhme.functions.supabase.co/functions/v1/twilio-clarice-voice" method="POST" input="speech" speechTimeout="3" timeout="5" actionOnEmptyResult="true" bargeIn="true">
     <Pause length="1"/>
   </Gather>
