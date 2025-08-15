@@ -13,8 +13,8 @@ serve(async (req) => {
   }
 
   try {
-    console.log('Clarice Voice Handler received:', req.method);
-    
+    const t0 = Date.now(); // handler_in
+
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
@@ -28,8 +28,6 @@ serve(async (req) => {
       webhookData[key] = value.toString();
     }
 
-    console.log('Webhook data:', JSON.stringify(webhookData, null, 2));
-
     const {
       CallSid,
       SpeechResult,
@@ -41,61 +39,32 @@ serve(async (req) => {
       throw new Error('No CallSid provided');
     }
 
-    // Get or create call record
-    let { data: call } = await supabase
-      .from('calls')
-      .select('id, clinic_id, caller_phone')
-      .eq('twilio_call_sid', CallSid)
+    // Get clinic_id from phone_numbers (minimal DB read)
+    const { data: phoneNumber } = await supabase
+      .from('phone_numbers')
+      .select('clinic_id')
+      .eq('e164', To)
+      .eq('status', 'active')
       .single();
 
-    if (!call) {
-      // Get clinic from phone_numbers table
-      const { data: phoneNumber } = await supabase
-        .from('phone_numbers')
-        .select('clinic_id')
-        .eq('e164', To)
-        .eq('status', 'active')
-        .single();
-
-      if (phoneNumber) {
-        const { data: newCall } = await supabase
-          .from('calls')
-          .insert({
-            twilio_call_sid: CallSid,
-            clinic_id: phoneNumber.clinic_id,
-            caller_phone: From,
-            status: 'in-progress'
-          })
-          .select()
-          .single();
-        
-        call = newCall;
-        console.log('Created new call record:', call?.id);
-      }
-    }
-
-    if (!call) {
-      console.error('Could not find or create call for:', CallSid);
-      return new Response('<?xml version="1.0" encoding="UTF-8"?><Response><Say>I apologize, but I cannot process your request right now.</Say><Hangup/></Response>', {
+    if (!phoneNumber) {
+      console.error('No active phone number found for:', To);
+      return new Response('<?xml version="1.0" encoding="UTF-8"?><Response><Say>Service unavailable.</Say><Hangup/></Response>', {
         headers: { 'Content-Type': 'text/xml' }
       });
     }
 
-    // Get AI settings and clinic info
-    const [{ data: clinic }, { data: aiSettings }] = await Promise.all([
-      supabase.from('clinics').select('name').eq('id', call.clinic_id).single(),
-      supabase.from('ai_settings').select('voice_id').eq('clinic_id', call.clinic_id).single()
-    ]);
+    // Get voice_id from ai_settings
+    const { data: aiSettings } = await supabase
+      .from('ai_settings')
+      .select('voice_id')
+      .eq('clinic_id', phoneNumber.clinic_id)
+      .single();
 
     const userMessage = SpeechResult || "Hello, I'd like to schedule an appointment.";
-    console.log('User said:', userMessage);
     
-    // Generate AI response using faster model
-    const systemPrompt = `You are an AI dental receptionist for ${clinic?.name || 'our dental clinic'}. 
-    Respond in exactly 1 sentence. Be direct and helpful.
-    Help with: appointments, questions, messages.`;
-
-    console.log('Generating AI response...');
+    // Generate SHORT AI response (< 100 tokens)
+    const systemPrompt = `You are Clarice, dental receptionist. Reply in 1 short sentence.`;
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -109,25 +78,22 @@ serve(async (req) => {
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userMessage }
         ],
-        max_tokens: 50,
+        max_tokens: 30,
         temperature: 0.5,
       }),
     });
 
-    let aiResponse = "Thank you for calling. How can I help you today?";
+    let aiResponse = "How can I help you today?";
     
     if (response.ok) {
       const data = await response.json();
       aiResponse = data.choices[0]?.message?.content || aiResponse;
-      console.log('AI Response:', aiResponse);
-    } else {
-      console.error('OpenAI API error:', await response.text());
     }
 
-    // Generate speech with ElevenLabs using voice from settings
+    // Use voice_id from settings, fallback to Clarice
     const voiceId = aiSettings?.voice_id || 'sIak7pFapfSLCfctxdOu';
-    console.log('Using voice:', voiceId);
 
+    // ElevenLabs synthesis with eleven_turbo_v2
     const ttsResponse = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
       method: 'POST',
       headers: {
@@ -138,6 +104,7 @@ serve(async (req) => {
       body: JSON.stringify({
         text: aiResponse,
         model_id: 'eleven_turbo_v2',
+        output_format: 'mp3_22050_32',
         voice_settings: {
           stability: 0.5,
           similarity_boost: 0.8,
@@ -147,16 +114,11 @@ serve(async (req) => {
       }),
     });
 
-    console.log('ElevenLabs TTS Response Status:', ttsResponse.status);
+    const t1 = Date.now(); // tts_done
 
     if (ttsResponse.ok) {
-      // Get the audio as array buffer
       const audioBuffer = await ttsResponse.arrayBuffer();
-      console.log('Audio buffer size:', audioBuffer.byteLength);
-      
-      // Generate unique session filename
-      const sessionCounter = Math.floor(Date.now() / 1000);
-      const sessionFileName = `audio/sessions/${CallSid}/${sessionCounter}.mp3`;
+      const sessionFileName = `audio/sessions/${CallSid}/${Date.now()}.mp3`;
       
       // Upload to Supabase Storage
       const { data: uploadData, error: uploadError } = await supabase.storage
@@ -167,46 +129,29 @@ serve(async (req) => {
         });
 
       if (uploadError) {
-        console.error('Storage upload error:', uploadError);
         throw new Error('Failed to upload audio');
       }
 
-      // Get public URL
       const { data: { publicUrl } } = supabase.storage
         .from('audio')
         .getPublicUrl(sessionFileName);
 
-      console.log('Audio uploaded to:', publicUrl);
+      const t2 = Date.now(); // upload_done
 
-      // Store conversation
-      await supabase
-        .from('turns')
-        .insert([
-          {
-            call_id: call.id,
-            role: 'user',
-            text: userMessage,
-          },
-          {
-            call_id: call.id,
-            role: 'assistant',
-            text: aiResponse,
-          }
-        ]);
+      // Log timing
+      console.log(JSON.stringify({
+        tag: "twilio-clarice-voice:timing",
+        CallSid, 
+        tts_ms: t1-t0, 
+        upload_ms: t2-t1, 
+        total_ms: t2-t0
+      }));
 
-      // Return TwiML with Play from storage
-      const twimlResponse = `<?xml version="1.0" encoding="UTF-8"?>
+      // Return TwiML with Play (NO base64)
+      return new Response(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Play>${publicUrl}</Play>
-  <Gather action="https://zvpezltqpphvolzgfhme.functions.supabase.co/functions/v1/twilio-clarice-voice" method="POST" timeout="8" input="speech" speechTimeout="auto">
-    <Pause length="1"/>
-  </Gather>
-  <Say voice="Polly.Joanna-Neural">Thank you for calling!</Say>
-  <Hangup/>
-</Response>`;
-
-      console.log('Returning TwiML with voice audio from storage');
-      return new Response(twimlResponse, {
+</Response>`, {
         headers: { 'Content-Type': 'text/xml' }
       });
 
@@ -214,18 +159,11 @@ serve(async (req) => {
       const errorText = await ttsResponse.text();
       console.error('ElevenLabs TTS error:', errorText);
       
-      // Fallback to simple voice
-      const twimlResponse = `<?xml version="1.0" encoding="UTF-8"?>
+      // Fallback to Polly
+      return new Response(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Say voice="Polly.Joanna-Neural">${aiResponse}</Say>
-  <Gather action="https://zvpezltqpphvolzgfhme.functions.supabase.co/functions/v1/twilio-clarice-voice" method="POST" timeout="8" input="speech" speechTimeout="auto">
-    <Say voice="Polly.Joanna-Neural">How else can I help?</Say>
-  </Gather>
-  <Say voice="Polly.Joanna-Neural">Thank you for calling!</Say>
-  <Hangup/>
-</Response>`;
-
-      return new Response(twimlResponse, {
+</Response>`, {
         headers: { 'Content-Type': 'text/xml' }
       });
     }

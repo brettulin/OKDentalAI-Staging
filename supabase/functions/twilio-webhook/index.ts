@@ -145,38 +145,39 @@ serve(async (req) => {
 
         // Step 3: Build optimized TwiML response
         console.log('=== TWIML GENERATION ===');
-        let twimlResponse = '<?xml version="1.0" encoding="UTF-8"?>\n<Response>\n';
+        let twimlResponse;
 
         const useGreetingAudio = aiSettings?.greeting_audio_url && aiSettings?.voice_enabled;
         
         if (useGreetingAudio) {
-          // Use pre-rendered greeting audio for fastest response
-          console.log('✅ Using pre-rendered greeting audio:', aiSettings.greeting_audio_url);
-          twimlResponse += `  <Play>${aiSettings.greeting_audio_url}</Play>\n`;
+          // Use pre-rendered greeting audio - NO extra <Say> elements
+          twimlResponse = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Play>${aiSettings.greeting_audio_url}</Play>
+  <Gather action="https://zvpezltqpphvolzgfhme.functions.supabase.co/functions/v1/twilio-clarice-voice" method="POST" input="speech" speechTimeout="1" timeout="3" actionOnEmptyResult="true" bargeIn="true">
+    <Say>Please tell me how I can help.</Say>
+  </Gather>
+</Response>`;
         } else {
           // Fallback to text greeting with Polly voice
           const greeting = aiSettings?.custom_greeting || 'Hello, my name is Clarice from Family Dental, how may I help you?';
-          console.log('📝 Using text greeting:', greeting.substring(0, 50) + '...');
-          twimlResponse += `  <Say voice="Polly.Joanna-Neural">${greeting}</Say>\n`;
+          twimlResponse = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  <Say voice="Polly.Joanna-Neural">${greeting}</Say>
+  <Gather action="https://zvpezltqpphvolzgfhme.functions.supabase.co/functions/v1/twilio-clarice-voice" method="POST" input="speech" speechTimeout="1" timeout="3" actionOnEmptyResult="true" bargeIn="true">
+    <Say>Please tell me how I can help.</Say>
+  </Gather>
+</Response>`;
         }
-
-        // Add gather for voice input - redirect to AI handler
-        twimlResponse += `  <Gather action="https://zvpezltqpphvolzgfhme.functions.supabase.co/functions/v1/twilio-clarice-voice" method="POST" timeout="8" input="speech" speechTimeout="auto">\n`;
-        twimlResponse += `    <Say>Please tell me how I can assist you.</Say>\n`;
-        twimlResponse += `  </Gather>\n`;
-        twimlResponse += `  <Say>Thank you for calling. Goodbye!</Say>\n`;
-        twimlResponse += `  <Hangup/>\n`;
-        twimlResponse += `</Response>`;
 
         // Log final TwiML and key metrics
-        console.log('=== FINAL RESPONSE ===');
-        console.log('Generated TwiML length:', twimlResponse.length);
-        console.log('Resolved clinic_id:', clinic_id);
-        console.log('Used greeting:', useGreetingAudio ? 'play' : 'say');
-        if (useGreetingAudio) {
-          console.log('URL:', aiSettings.greeting_audio_url);
-        }
-        console.log('TwiML Response:', twimlResponse);
+        console.log(JSON.stringify({
+          tag: "twilio-webhook:twiml",
+          clinic_id,
+          used_greeting: useGreetingAudio ? "play" : "say",
+          greeting_url: useGreetingAudio ? aiSettings.greeting_audio_url : null,
+          url: req.url
+        }));
 
         return new Response(twimlResponse, {
           headers: { 'Content-Type': 'text/xml' }

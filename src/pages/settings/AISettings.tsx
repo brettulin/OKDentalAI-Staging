@@ -606,34 +606,42 @@ const AISettingsPage = () => {
         {/* QA Dry Run Test */}
         <Card>
           <CardHeader>
-            <CardTitle>QA Dry Run Test</CardTitle>
-            <CardDescription>Test the exact TwiML returned by the webhook</CardDescription>
+            <CardTitle>Test Greeting (Dry Run)</CardTitle>
+            <CardDescription>Test the exact TwiML that will be returned for incoming calls</CardDescription>
           </CardHeader>
           <CardContent>
-            <Button
-              onClick={async () => {
-                try {
-                  const formData = new FormData();
-                  formData.append('To', '+14058352486');
-                  formData.append('From', '+15551234567');
-                  formData.append('CallSid', 'CA1234567890abcdef1234567890abcdef');
-                  formData.append('CallStatus', 'ringing');
-                  
-                  const response = await fetch('https://zvpezltqpphvolzgfhme.functions.supabase.co/functions/v1/twilio-webhook', {
-                    method: 'POST',
-                    body: formData
-                  });
-                  
-                  const twiml = await response.text();
-                  alert(`TwiML Response:\n\n${twiml}`);
-                } catch (error) {
-                  alert(`Error: ${error.message}`);
-                }
-              }}
-              variant="outline"
-            >
-              Test Webhook TwiML
-            </Button>
+            <div className="space-y-4">
+              <Button
+                onClick={async () => {
+                  try {
+                    const { data, error } = await supabase.functions.invoke('diag-greeting', {
+                      body: { To: '+14058352486' }
+                    });
+                    
+                    if (error) throw error;
+                    
+                    const result = `CLINIC RESOLUTION:
+- Clinic ID: ${data.clinic_id}
+- Phone Number: ${data.number}
+- Voice ID: ${data.voice_id}
+- Voice Enabled: ${data.voice_enabled}
+- Greeting URL: ${data.greeting_url || 'None (will use <Say>)'}
+
+TWIML PREVIEW:
+${data.twiml_preview}`;
+
+                    alert(result);
+                  } catch (error) {
+                    alert(`Error: ${error.message}`);
+                  }
+                }}
+                variant="outline"
+                className="flex items-center gap-2"
+              >
+                <Play className="h-4 w-4" />
+                Test Greeting (Dry Run)
+              </Button>
+            </div>
           </CardContent>
         </Card>
 
