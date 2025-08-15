@@ -665,24 +665,6 @@ ${data.twiml_preview}`;
                   <Play className="h-4 w-4" />
                   Manual Test
                 </Button>
-                
-                <Button
-                  onClick={async () => {
-                    try {
-                      const { data, error } = await supabase.functions.invoke('force-greeting-generation');
-                      if (error) throw error;
-                      
-                      alert(`SUCCESS! Generated greeting audio.\nResult: ${JSON.stringify(data, null, 2)}`);
-                      window.location.reload(); // Refresh to show updated status
-                    } catch (error) {
-                      alert(`Force Generation Error: ${error.message}`);
-                    }
-                  }}
-                  className="flex items-center gap-2 bg-green-600 hover:bg-green-700"
-                >
-                  <Volume2 className="h-4 w-4" />
-                  🔧 Force Generate Audio
-                </Button>
               </div>
             </div>
           </CardContent>

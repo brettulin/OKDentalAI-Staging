@@ -151,6 +151,9 @@ serve(async (req) => {
       return new Response(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Play>${publicUrl}</Play>
+  <Gather action="https://zvpezltqpphvolzgfhme.functions.supabase.co/functions/v1/twilio-clarice-voice" method="POST" input="speech" speechTimeout="3" timeout="5" actionOnEmptyResult="true" bargeIn="true">
+    <Pause length="1"/>
+  </Gather>
 </Response>`, {
         headers: { 'Content-Type': 'text/xml' }
       });
@@ -163,6 +166,9 @@ serve(async (req) => {
       return new Response(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Say voice="Polly.Joanna-Neural">${aiResponse}</Say>
+  <Gather action="https://zvpezltqpphvolzgfhme.functions.supabase.co/functions/v1/twilio-clarice-voice" method="POST" input="speech" speechTimeout="3" timeout="5" actionOnEmptyResult="true" bargeIn="true">
+    <Pause length="1"/>
+  </Gather>
 </Response>`, {
         headers: { 'Content-Type': 'text/xml' }
       });

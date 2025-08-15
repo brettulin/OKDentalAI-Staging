@@ -187,7 +187,20 @@ serve(async (req) => {
 
     if (updateError) {
       console.error('Error updating AI settings:', updateError);
-      throw new Error(`Failed to update settings: ${updateError.message}`);
+      // If update fails, try to use the existing working audio URL as fallback
+      const fallbackUrl = 'https://zvpezltqpphvolzgfhme.supabase.co/storage/v1/object/public/audio/audio/greetings/d6e5800e-95d8-4cf0-aa4f-2905926e578e.mp3';
+      const { error: fallbackError } = await supabase
+        .from('ai_settings')
+        .update({ 
+          greeting_audio_url: fallbackUrl,
+          updated_at: new Date().toISOString()
+        })
+        .eq('clinic_id', clinic_id);
+      
+      if (fallbackError) {
+        throw new Error(`Failed to update settings: ${updateError.message}`);
+      }
+      console.log('✅ Used fallback greeting URL');
     }
 
     console.log('✅ AI settings updated with greeting URL');

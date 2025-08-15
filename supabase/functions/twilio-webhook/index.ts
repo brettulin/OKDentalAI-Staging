@@ -150,12 +150,12 @@ serve(async (req) => {
         const useGreetingAudio = aiSettings?.greeting_audio_url && aiSettings?.voice_enabled !== false;
         
         if (useGreetingAudio) {
-          // Use pre-rendered greeting audio - NO extra <Say> elements
+          // Use pre-rendered greeting audio - NO extra prompts
           twimlResponse = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Play>${aiSettings.greeting_audio_url}</Play>
-  <Gather action="https://zvpezltqpphvolzgfhme.functions.supabase.co/functions/v1/twilio-clarice-voice" method="POST" input="speech" speechTimeout="1" timeout="3" actionOnEmptyResult="true" bargeIn="true">
-    <Say>Please tell me how I can help.</Say>
+  <Gather action="https://zvpezltqpphvolzgfhme.functions.supabase.co/functions/v1/twilio-clarice-voice" method="POST" input="speech" speechTimeout="3" timeout="5" actionOnEmptyResult="true" bargeIn="true">
+    <Pause length="1"/>
   </Gather>
 </Response>`;
         } else {
