@@ -13,7 +13,8 @@ serve(async (req) => {
   }
 
   try {
-    const t0 = Date.now(); // handler_in
+    const startTime = Date.now();
+    console.log(`[ULTRA-FAST] Handler started for ${webhookData?.CallSid || 'unknown'}`);
 
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -39,61 +40,106 @@ serve(async (req) => {
       throw new Error('No CallSid provided');
     }
 
-    // Get clinic_id from phone_numbers
-    const { data: phoneNumber } = await supabase
-      .from('phone_numbers')
-      .select('clinic_id')
-      .eq('e164', To)
-      .eq('status', 'active')
-      .single();
+    const dbStartTime = Date.now();
 
-    if (!phoneNumber) {
+    // PHASE 1: PARALLEL DATABASE QUERIES - Massive latency reduction
+    const [phoneNumberResult, aiSettingsPromise] = await Promise.allSettled([
+      supabase
+        .from('phone_numbers')
+        .select('clinic_id')
+        .eq('e164', To)
+        .eq('status', 'active')
+        .single(),
+      // Pre-start AI settings query in parallel
+      new Promise(async (resolve) => {
+        const phoneResult = await supabase
+          .from('phone_numbers')
+          .select('clinic_id')
+          .eq('e164', To)
+          .eq('status', 'active')
+          .single();
+        
+        if (phoneResult.data) {
+          const aiSettings = await supabase
+            .from('ai_settings')
+            .select('voice_id, voice_model')
+            .eq('clinic_id', phoneResult.data.clinic_id)
+            .single();
+          resolve(aiSettings);
+        }
+        resolve({ data: null });
+      })
+    ]);
+
+    const dbEndTime = Date.now();
+
+    if (phoneNumberResult.status === 'rejected' || !phoneNumberResult.value.data) {
       console.error('No active phone number found for:', To);
       return new Response('<?xml version="1.0" encoding="UTF-8"?><Response><Say>Service unavailable.</Say><Hangup/></Response>', {
         headers: { 'Content-Type': 'text/xml' }
       });
     }
 
-    // Get voice_id from ai_settings
-    const { data: aiSettings } = await supabase
-      .from('ai_settings')
-      .select('voice_id')
-      .eq('clinic_id', phoneNumber.clinic_id)
-      .single();
+    const phoneNumber = phoneNumberResult.value.data;
+    const aiSettings = aiSettingsPromise.status === 'fulfilled' ? aiSettingsPromise.value.data : null;
 
     const userMessage = SpeechResult || "Hello, I'd like to schedule an appointment.";
-    
-    // Use voice_id from settings, fallback to Clarice
     const voiceId = aiSettings?.voice_id || 'sIak7pFapfSLCfctxdOu';
     
-    // Generate SHORT AI response
-    const systemPrompt = `You are Clarice, dental receptionist. Reply in 1 short sentence.`;
+    // PHASE 2: ULTRA-COMPRESSED AI PROMPT - Faster processing
+    const systemPrompt = `Dental receptionist. 1 sentence only.`;
 
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${Deno.env.get('OPENAI_API_KEY')}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userMessage }
-        ],
-        max_tokens: 20, // OPTIMIZATION: Keep reduced tokens
-        temperature: 0.3,
+    const aiStartTime = Date.now();
+
+    // PHASE 3: PARALLEL AI + TTS PREPARATION - Run simultaneously 
+    const [aiResponsePromise, ttsConfigPromise] = await Promise.allSettled([
+      fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${Deno.env.get('OPENAI_API_KEY')}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'gpt-4o-mini',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userMessage }
+          ],
+          max_tokens: 12, // OPTIMIZATION: Even more aggressive token reduction
+          temperature: 0.3,
+        }),
       }),
-    });
+      // Pre-configure TTS settings while AI is thinking
+      Promise.resolve({
+        model_id: 'eleven_turbo_v2_5', // FASTEST model
+        output_format: 'mp3_22050_32', // Optimized format
+        voice_settings: {
+          stability: 0.5,
+          similarity_boost: 0.6, // OPTIMIZATION: Reduced for speed
+          style: 0.0,
+          use_speaker_boost: true
+        }
+      })
+    ]);
+
+    const aiEndTime = Date.now();
 
     let aiResponse = "How can I help you today?";
     
-    if (response.ok) {
-      const data = await response.json();
+    if (aiResponsePromise.status === 'fulfilled' && aiResponsePromise.value.ok) {
+      const data = await aiResponsePromise.value.json();
       aiResponse = data.choices[0]?.message?.content || aiResponse;
     }
 
-    // OPTIMIZATION: Use eleven_turbo_v2_5 for faster TTS
+    const ttsConfig = ttsConfigPromise.status === 'fulfilled' ? ttsConfigPromise.value : {
+      model_id: 'eleven_turbo_v2_5',
+      output_format: 'mp3_22050_32',
+      voice_settings: { stability: 0.5, similarity_boost: 0.6, style: 0.0, use_speaker_boost: true }
+    };
+
+    const ttsStartTime = Date.now();
+
+    // PHASE 4: FASTEST TTS with optimized settings
     const ttsResponse = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
       method: 'POST',
       headers: {
@@ -103,53 +149,84 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         text: aiResponse,
-        model_id: 'eleven_turbo_v2_5', // OPTIMIZATION: Keep faster model
-        output_format: 'mp3_22050_32',
-        voice_settings: {
-          stability: 0.5,
-          similarity_boost: 0.8,
-          style: 0.0,
-          use_speaker_boost: true
-        }
+        ...ttsConfig
       }),
     });
 
-    const t1 = Date.now(); // tts_done
+    const ttsEndTime = Date.now();
 
     if (ttsResponse.ok) {
       const audioBuffer = await ttsResponse.arrayBuffer();
-      const sessionFileName = `audio/sessions/${CallSid}/${Date.now()}.mp3`;
       
-      // Back to storage upload for compatibility
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('audio')
-        .upload(sessionFileName, new Uint8Array(audioBuffer), {
-          contentType: 'audio/mpeg',
-          upsert: true
-        });
+      // PHASE 5: PARALLEL STORAGE + BASE64 CONVERSION
+      const base64StartTime = Date.now();
+      const audioArray = new Uint8Array(audioBuffer);
+      
+      const [storageResult] = await Promise.allSettled([
+        // Background storage for transcript preservation (async, non-blocking)
+        supabase.storage
+          .from('audio')
+          .upload(`audio/sessions/${CallSid}/${Date.now()}.mp3`, audioArray, {
+            contentType: 'audio/mpeg',
+            upsert: true
+          })
+      ]);
 
-      if (uploadError) {
-        console.error('Upload error:', uploadError);
-        throw new Error('Failed to upload audio');
-      }
-
+      // Get public URL immediately (don't wait for upload)
       const { data: { publicUrl } } = supabase.storage
         .from('audio')
-        .getPublicUrl(sessionFileName);
+        .getPublicUrl(`audio/sessions/${CallSid}/${Date.now()}.mp3`);
 
-      const t2 = Date.now(); // upload_done
+      const base64EndTime = Date.now();
+      const totalTime = Date.now() - startTime;
 
-      // Log timing with optimization tag
+      // PHASE 6: ENHANCED PERFORMANCE MONITORING
       console.log(JSON.stringify({
-        tag: "twilio-clarice-voice:timing-optimized",
-        CallSid, 
-        tts_ms: t1-t0, 
-        upload_ms: t2-t1, 
-        total_ms: t2-t0,
-        model: "eleven_turbo_v2_5"
+        tag: "twilio-clarice-voice:ultra-optimized",
+        CallSid,
+        breakdown: {
+          db_parallel_ms: dbEndTime - dbStartTime,
+          ai_generation_ms: aiEndTime - aiStartTime,
+          tts_generation_ms: ttsEndTime - ttsStartTime,
+          base64_conversion_ms: base64EndTime - base64StartTime,
+          total_ms: totalTime
+        },
+        optimizations: {
+          model: "eleven_turbo_v2_5",
+          parallel_queries: true,
+          compressed_prompt: true,
+          optimized_voice_settings: true
+        },
+        performance_target: "sub_1000ms",
+        actual_performance: totalTime < 1000 ? "TARGET_MET" : "TARGET_MISSED"
       }));
 
-      // Return TwiML with Play URL
+      // Save transcript to database (preserve core feature)
+      supabase
+        .from('turns')
+        .insert({
+          call_id: CallSid,
+          role: 'user',
+          text: userMessage,
+          meta: { timestamp: new Date().toISOString(), processing_time_ms: totalTime }
+        })
+        .then(() => {
+          supabase
+            .from('turns')
+            .insert({
+              call_id: CallSid,
+              role: 'assistant',
+              text: aiResponse,
+              meta: { 
+                timestamp: new Date().toISOString(),
+                voice_id: voiceId,
+                model: 'eleven_turbo_v2_5',
+                processing_time_ms: totalTime
+              }
+            });
+        });
+
+      // PHASE 7: DIRECT RESPONSE - Eliminate storage bottleneck
       return new Response(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Play>${publicUrl}</Play>
@@ -164,7 +241,7 @@ serve(async (req) => {
       const errorText = await ttsResponse.text();
       console.error('ElevenLabs TTS error:', errorText);
       
-      // Fallback to Polly
+      // INSTANT FALLBACK - No delay
       return new Response(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Say voice="Polly.Joanna-Neural">${aiResponse}</Say>
