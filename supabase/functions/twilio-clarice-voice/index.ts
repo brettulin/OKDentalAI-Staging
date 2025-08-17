@@ -44,17 +44,22 @@ serve(async (req) => {
     const dbStartTime = Date.now();
     const userMessage = SpeechResult || "Hello, I'd like to schedule an appointment.";
 
-    // PHASE 1: OPTIMIZED PARALLEL DATABASE + AI + TTS PREP - ALL SIMULTANEOUS
+    // PHASE 1: MAXIMUM PARALLEL OPTIMIZATION - All operations simultaneous
     const [phoneResult, aiResponsePromise, ttsConfigPromise] = await Promise.allSettled([
-      // Single phone lookup with clinic data join for maximum efficiency
+      // Single optimized query for phone + AI settings
       supabase
         .from('phone_numbers')
-        .select('clinic_id, ai_settings!inner(voice_id, voice_model)')
+        .select(`
+          clinic_id,
+          clinics!inner(
+            ai_settings!inner(voice_id, voice_model)
+          )
+        `)
         .eq('e164', To)
         .eq('status', 'active')
         .single(),
       
-      // AI generation starts immediately in parallel
+      // AI generation starts immediately - NO WAITING
       fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
@@ -67,18 +72,18 @@ serve(async (req) => {
             { role: 'system', content: 'Dental receptionist. 1 sentence only.' },
             { role: 'user', content: userMessage }
           ],
-          max_tokens: 10, // ULTRA aggressive token reduction
-          temperature: 0.2, // Slight reduction for speed
+          max_tokens: 8, // MAXIMUM aggressive reduction
+          temperature: 0.1, // Fastest possible
         }),
       }),
       
-      // TTS config preparation (instant resolution)
+      // TTS config - instant
       Promise.resolve({
         model_id: 'eleven_turbo_v2_5',
         output_format: 'mp3_22050_32',
         voice_settings: {
-          stability: 0.4, // Optimized for speed
-          similarity_boost: 0.5, // Further reduced for max speed
+          stability: 0.3, // ULTRA optimized for max speed
+          similarity_boost: 0.4, // Minimal for speed
           style: 0.0,
           use_speaker_boost: true
         }
@@ -87,7 +92,7 @@ serve(async (req) => {
 
     const dbEndTime = Date.now();
 
-    // Handle phone number lookup failure
+    // Handle failures
     if (phoneResult.status === 'rejected' || !phoneResult.value.data) {
       console.error('No active phone number found for:', To);
       return new Response('<?xml version="1.0" encoding="UTF-8"?><Response><Say>Service unavailable.</Say><Hangup/></Response>', {
@@ -96,7 +101,7 @@ serve(async (req) => {
     }
 
     const phoneData = phoneResult.value.data;
-    const voiceId = phoneData.ai_settings?.voice_id || 'sIak7pFapfSLCfctxdOu';
+    const voiceId = phoneData.clinics?.ai_settings?.voice_id || 'sIak7pFapfSLCfctxdOu';
 
     const aiEndTime = Date.now();
 
@@ -135,31 +140,39 @@ serve(async (req) => {
     if (ttsResponse.ok) {
       const audioBuffer = await ttsResponse.arrayBuffer();
       
-      // PHASE 5: PARALLEL STORAGE + BASE64 CONVERSION
+      // PHASE 2: ELIMINATE STORAGE BOTTLENECK - Direct base64 streaming
       const base64StartTime = Date.now();
-      const audioArray = new Uint8Array(audioBuffer);
-      
-      const [storageResult] = await Promise.allSettled([
-        // Background storage for transcript preservation (async, non-blocking)
-        supabase.storage
-          .from('audio')
-          .upload(`audio/sessions/${CallSid}/${Date.now()}.mp3`, audioArray, {
-            contentType: 'audio/mpeg',
-            upsert: true
-          })
-      ]);
-
-      // Get public URL immediately (don't wait for upload)
-      const { data: { publicUrl } } = supabase.storage
-        .from('audio')
-        .getPublicUrl(`audio/sessions/${CallSid}/${Date.now()}.mp3`);
-
+      const base64Audio = btoa(String.fromCharCode(...new Uint8Array(audioBuffer)));
       const base64EndTime = Date.now();
+      
       const totalTime = Date.now() - startTime;
 
-      // PHASE 6: ENHANCED PERFORMANCE MONITORING
+      // BACKGROUND TASK: Async transcript logging (non-blocking)
+      const transcriptPromise = supabase
+        .from('turns')
+        .insert([
+          {
+            call_id: CallSid,
+            role: 'user',
+            text: userMessage,
+            meta: { timestamp: new Date().toISOString(), processing_time_ms: totalTime }
+          },
+          {
+            call_id: CallSid,
+            role: 'assistant',
+            text: aiResponse,
+            meta: { 
+              timestamp: new Date().toISOString(),
+              voice_id: voiceId,
+              model: 'eleven_turbo_v2_5',
+              processing_time_ms: totalTime
+            }
+          }
+        ]);
+
+      // ULTRA-PERFORMANCE MONITORING
       console.log(JSON.stringify({
-        tag: "twilio-clarice-voice:ultra-optimized",
+        tag: "twilio-clarice-voice:phase2-optimized",
         CallSid,
         breakdown: {
           db_parallel_ms: dbEndTime - dbStartTime,
@@ -170,43 +183,19 @@ serve(async (req) => {
         },
         optimizations: {
           model: "eleven_turbo_v2_5",
-          parallel_queries: true,
-          compressed_prompt: true,
-          optimized_voice_settings: true
+          max_parallel: true,
+          storage_eliminated: true,
+          direct_base64_streaming: true,
+          ultra_compressed_ai: true
         },
-        performance_target: "sub_1000ms",
-        actual_performance: totalTime < 1000 ? "TARGET_MET" : "TARGET_MISSED"
+        performance_target: "sub_800ms",
+        actual_performance: totalTime < 800 ? "TARGET_MET" : totalTime < 1000 ? "CLOSE" : "TARGET_MISSED"
       }));
 
-      // Save transcript to database (preserve core feature)
-      supabase
-        .from('turns')
-        .insert({
-          call_id: CallSid,
-          role: 'user',
-          text: userMessage,
-          meta: { timestamp: new Date().toISOString(), processing_time_ms: totalTime }
-        })
-        .then(() => {
-          supabase
-            .from('turns')
-            .insert({
-              call_id: CallSid,
-              role: 'assistant',
-              text: aiResponse,
-              meta: { 
-                timestamp: new Date().toISOString(),
-                voice_id: voiceId,
-                model: 'eleven_turbo_v2_5',
-                processing_time_ms: totalTime
-              }
-            });
-        });
-
-      // PHASE 7: DIRECT RESPONSE - Eliminate storage bottleneck
+      // PHASE 2: DIRECT BASE64 RESPONSE - Maximum speed
       return new Response(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
-  <Play>${publicUrl}</Play>
+  <Play>data:audio/mpeg;base64,${base64Audio}</Play>
   <Gather action="https://zvpezltqpphvolzgfhme.functions.supabase.co/functions/v1/twilio-clarice-voice" method="POST" input="speech" speechTimeout="3" timeout="5" actionOnEmptyResult="true" bargeIn="true">
     <Pause length="1"/>
   </Gather>
