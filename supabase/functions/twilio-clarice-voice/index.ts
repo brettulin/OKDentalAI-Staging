@@ -14,14 +14,8 @@ serve(async (req) => {
 
   try {
     const startTime = Date.now();
-    console.log(`[ULTRA-FAST] Handler started for ${webhookData?.CallSid || 'unknown'}`);
-
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    );
-
-    // Parse form data from Twilio
+    
+    // Parse form data from Twilio FIRST (blocking operation)
     const formData = await req.formData();
     const webhookData: Record<string, string> = {};
     
@@ -36,63 +30,31 @@ serve(async (req) => {
       To
     } = webhookData;
 
+    console.log(`[ULTRA-FAST] Handler started for ${CallSid || 'unknown'}`);
+
     if (!CallSid) {
       throw new Error('No CallSid provided');
     }
 
-    const dbStartTime = Date.now();
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    );
 
-    // PHASE 1: PARALLEL DATABASE QUERIES - Massive latency reduction
-    const [phoneNumberResult, aiSettingsPromise] = await Promise.allSettled([
+    const dbStartTime = Date.now();
+    const userMessage = SpeechResult || "Hello, I'd like to schedule an appointment.";
+
+    // PHASE 1: OPTIMIZED PARALLEL DATABASE + AI + TTS PREP - ALL SIMULTANEOUS
+    const [phoneResult, aiResponsePromise, ttsConfigPromise] = await Promise.allSettled([
+      // Single phone lookup with clinic data join for maximum efficiency
       supabase
         .from('phone_numbers')
-        .select('clinic_id')
+        .select('clinic_id, ai_settings!inner(voice_id, voice_model)')
         .eq('e164', To)
         .eq('status', 'active')
         .single(),
-      // Pre-start AI settings query in parallel
-      new Promise(async (resolve) => {
-        const phoneResult = await supabase
-          .from('phone_numbers')
-          .select('clinic_id')
-          .eq('e164', To)
-          .eq('status', 'active')
-          .single();
-        
-        if (phoneResult.data) {
-          const aiSettings = await supabase
-            .from('ai_settings')
-            .select('voice_id, voice_model')
-            .eq('clinic_id', phoneResult.data.clinic_id)
-            .single();
-          resolve(aiSettings);
-        }
-        resolve({ data: null });
-      })
-    ]);
-
-    const dbEndTime = Date.now();
-
-    if (phoneNumberResult.status === 'rejected' || !phoneNumberResult.value.data) {
-      console.error('No active phone number found for:', To);
-      return new Response('<?xml version="1.0" encoding="UTF-8"?><Response><Say>Service unavailable.</Say><Hangup/></Response>', {
-        headers: { 'Content-Type': 'text/xml' }
-      });
-    }
-
-    const phoneNumber = phoneNumberResult.value.data;
-    const aiSettings = aiSettingsPromise.status === 'fulfilled' ? aiSettingsPromise.value.data : null;
-
-    const userMessage = SpeechResult || "Hello, I'd like to schedule an appointment.";
-    const voiceId = aiSettings?.voice_id || 'sIak7pFapfSLCfctxdOu';
-    
-    // PHASE 2: ULTRA-COMPRESSED AI PROMPT - Faster processing
-    const systemPrompt = `Dental receptionist. 1 sentence only.`;
-
-    const aiStartTime = Date.now();
-
-    // PHASE 3: PARALLEL AI + TTS PREPARATION - Run simultaneously 
-    const [aiResponsePromise, ttsConfigPromise] = await Promise.allSettled([
+      
+      // AI generation starts immediately in parallel
       fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
@@ -102,44 +64,59 @@ serve(async (req) => {
         body: JSON.stringify({
           model: 'gpt-4o-mini',
           messages: [
-            { role: 'system', content: systemPrompt },
+            { role: 'system', content: 'Dental receptionist. 1 sentence only.' },
             { role: 'user', content: userMessage }
           ],
-          max_tokens: 12, // OPTIMIZATION: Even more aggressive token reduction
-          temperature: 0.3,
+          max_tokens: 10, // ULTRA aggressive token reduction
+          temperature: 0.2, // Slight reduction for speed
         }),
       }),
-      // Pre-configure TTS settings while AI is thinking
+      
+      // TTS config preparation (instant resolution)
       Promise.resolve({
-        model_id: 'eleven_turbo_v2_5', // FASTEST model
-        output_format: 'mp3_22050_32', // Optimized format
+        model_id: 'eleven_turbo_v2_5',
+        output_format: 'mp3_22050_32',
         voice_settings: {
-          stability: 0.5,
-          similarity_boost: 0.6, // OPTIMIZATION: Reduced for speed
+          stability: 0.4, // Optimized for speed
+          similarity_boost: 0.5, // Further reduced for max speed
           style: 0.0,
           use_speaker_boost: true
         }
       })
     ]);
 
+    const dbEndTime = Date.now();
+
+    // Handle phone number lookup failure
+    if (phoneResult.status === 'rejected' || !phoneResult.value.data) {
+      console.error('No active phone number found for:', To);
+      return new Response('<?xml version="1.0" encoding="UTF-8"?><Response><Say>Service unavailable.</Say><Hangup/></Response>', {
+        headers: { 'Content-Type': 'text/xml' }
+      });
+    }
+
+    const phoneData = phoneResult.value.data;
+    const voiceId = phoneData.ai_settings?.voice_id || 'sIak7pFapfSLCfctxdOu';
+
     const aiEndTime = Date.now();
 
+    // Extract AI response
     let aiResponse = "How can I help you today?";
-    
     if (aiResponsePromise.status === 'fulfilled' && aiResponsePromise.value.ok) {
       const data = await aiResponsePromise.value.json();
       aiResponse = data.choices[0]?.message?.content || aiResponse;
     }
 
+    // Get TTS config
     const ttsConfig = ttsConfigPromise.status === 'fulfilled' ? ttsConfigPromise.value : {
       model_id: 'eleven_turbo_v2_5',
       output_format: 'mp3_22050_32',
-      voice_settings: { stability: 0.5, similarity_boost: 0.6, style: 0.0, use_speaker_boost: true }
+      voice_settings: { stability: 0.4, similarity_boost: 0.5, style: 0.0, use_speaker_boost: true }
     };
 
     const ttsStartTime = Date.now();
 
-    // PHASE 4: FASTEST TTS with optimized settings
+    // PHASE 4: FASTEST TTS with ultra-optimized settings
     const ttsResponse = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
       method: 'POST',
       headers: {
