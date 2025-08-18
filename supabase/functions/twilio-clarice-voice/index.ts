@@ -103,13 +103,18 @@ serve(async (req) => {
     const phoneData = phoneResult.value.data;
     const voiceId = phoneData.clinics?.ai_settings?.voice_id || 'sIak7pFapfSLCfctxdOu';
 
-    const aiEndTime = Date.now();
-
-    // Extract AI response
+    // Extract AI response - CRITICAL FIX: Actually await the AI response
     let aiResponse = "How can I help you today?";
-    if (aiResponsePromise.status === 'fulfilled' && aiResponsePromise.value.ok) {
-      const data = await aiResponsePromise.value.json();
-      aiResponse = data.choices[0]?.message?.content || aiResponse;
+    let aiEndTime = Date.now();
+    
+    if (aiResponsePromise.status === 'fulfilled') {
+      try {
+        const data = await aiResponsePromise.value.json();
+        aiResponse = data.choices[0]?.message?.content || aiResponse;
+        aiEndTime = Date.now();
+      } catch (error) {
+        console.error('AI response parsing error:', error);
+      }
     }
 
     // Get TTS config
