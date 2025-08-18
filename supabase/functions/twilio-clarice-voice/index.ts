@@ -44,9 +44,9 @@ serve(async (req) => {
     const dbStartTime = Date.now();
     const userMessage = SpeechResult || "Hello, I'd like to schedule an appointment.";
 
-    // PHASE 3: EXTREME OPTIMIZATION - Pre-compute and cache everything possible
-    const [phoneResult, aiResponsePromise, ttsConfigPromise, streamingPromise] = await Promise.allSettled([
-      // Single optimized query for phone + AI settings
+    // PHASE 3 FINAL: MAXIMUM PARALLELIZATION - All operations happen simultaneously
+    const [phoneResult, aiResponsePromise, ttsConnectionPromise] = await Promise.allSettled([
+      // Optimized single query for phone + AI settings
       supabase
         .from('phone_numbers')
         .select(`
@@ -59,7 +59,7 @@ serve(async (req) => {
         .eq('status', 'active')
         .single(),
       
-      // PHASE 3: ULTRA-AGGRESSIVE AI - Even faster model with streaming
+      // PHASE 3: EXTREME AI OPTIMIZATION - Maximum speed configuration
       fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
@@ -67,36 +67,26 @@ serve(async (req) => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'gpt-4o-mini',
+          model: 'gpt-4o-mini', // Fastest reliable model
           messages: [
-            { role: 'system', content: 'Dental receptionist. 5 words max.' },
-            { role: 'user', content: userMessage.slice(0, 50) } // Truncate input for speed
+            { role: 'system', content: 'Dental receptionist. Brief.' },
+            { role: 'user', content: userMessage.slice(0, 40) } // Maximum truncation
           ],
-          max_tokens: 6, // EVEN MORE aggressive
-          temperature: 0, // Zero creativity for max speed
-          frequency_penalty: 0.2, // Discourage repetition
+          max_tokens: 5, // Ultra-minimal response
+          temperature: 0, // No creativity needed
+          frequency_penalty: 0.3, // Reduce repetition
+          presence_penalty: 0.1 // Encourage brevity
         }),
       }),
       
-      // PHASE 3: ULTRA-FAST TTS config with precomputed settings
-      Promise.resolve({
-        model_id: 'eleven_turbo_v2_5',
-        output_format: 'mp3_22050_32', // Lowest quality for speed
-        voice_settings: {
-          stability: 0.2, // Even lower for max speed
-          similarity_boost: 0.3, // Minimal quality for max speed
-          style: 0.0,
-          use_speaker_boost: false // Disable for speed
-        }
-      }),
-      
-      // PHASE 3: PRE-INITIALIZE TTS connection
+      // PHASE 3: PRE-WARM TTS CONNECTION for instant availability
       fetch(`https://api.elevenlabs.io/v1/voices`, {
         method: 'GET',
         headers: {
           'xi-api-key': Deno.env.get('ELEVENLABS_API_KEY'),
+          'connection': 'keep-alive'
         },
-      }).catch(() => null) // Pre-warm connection, ignore errors
+      }).catch(() => null)
     ]);
 
     const dbEndTime = Date.now();
@@ -112,40 +102,46 @@ serve(async (req) => {
     const phoneData = phoneResult.value.data;
     const voiceId = phoneData.clinics?.ai_settings?.voice_id || 'sIak7pFapfSLCfctxdOu';
 
-    // Extract AI response - CRITICAL FIX: Actually await the AI response
-    let aiResponse = "How can I help you today?";
+    // PHASE 3: EXTRACT AI RESPONSE WITH MINIMAL PROCESSING
+    let aiResponse = "How can I help?"; // Ultra-brief fallback
     let aiEndTime = Date.now();
     
     if (aiResponsePromise.status === 'fulfilled') {
       try {
         const data = await aiResponsePromise.value.json();
-        aiResponse = data.choices[0]?.message?.content || aiResponse;
+        aiResponse = data.choices[0]?.message?.content?.slice(0, 50) || aiResponse; // Truncate response
         aiEndTime = Date.now();
       } catch (error) {
         console.error('AI response parsing error:', error);
       }
     }
 
-    // Get TTS config
-    const ttsConfig = ttsConfigPromise.status === 'fulfilled' ? ttsConfigPromise.value : {
-      model_id: 'eleven_turbo_v2_5',
-      output_format: 'mp3_22050_32',
-      voice_settings: { stability: 0.4, similarity_boost: 0.5, style: 0.0, use_speaker_boost: true }
+    // PHASE 3: ULTRA-OPTIMIZED TTS CONFIG - Minimal quality for maximum speed
+    const ttsConfig = {
+      model_id: 'eleven_turbo_v2_5', // Fastest model
+      output_format: 'mp3_22050_32', // Lowest quality/size
+      voice_settings: {
+        stability: 0.1, // Minimal for max speed
+        similarity_boost: 0.2, // Minimal quality
+        style: 0.0, // No style processing
+        use_speaker_boost: false // Disable for speed
+      }
     };
 
     const ttsStartTime = Date.now();
 
-    // PHASE 3: ULTRA-FAST TTS with connection reuse and minimal text
+    // PHASE 3 FINAL: INSTANT TTS GENERATION with aggressive optimization
     const ttsResponse = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
       method: 'POST',
       headers: {
         'xi-api-key': Deno.env.get('ELEVENLABS_API_KEY'),
         'content-type': 'application/json',
         'accept': 'audio/mpeg',
-        'connection': 'keep-alive' // Reuse connection
+        'connection': 'keep-alive', // Reuse pre-warmed connection
+        'cache-control': 'no-cache' // Prevent caching delays
       },
       body: JSON.stringify({
-        text: aiResponse.slice(0, 100), // Truncate for speed
+        text: aiResponse.slice(0, 60), // Ultra-minimal text for speed
         ...ttsConfig
       }),
     });
@@ -155,23 +151,24 @@ serve(async (req) => {
     if (ttsResponse.ok) {
       const audioBuffer = await ttsResponse.arrayBuffer();
       
-      // PHASE 3: ULTRA-FAST BASE64 - Streaming conversion with chunking
+      // PHASE 3 FINAL: ULTRA-OPTIMIZED BASE64 CONVERSION
       const base64StartTime = Date.now();
       const uint8Array = new Uint8Array(audioBuffer);
-      const base64Audio = btoa(String.fromCharCode.apply(null, Array.from(uint8Array)));
+      // Direct conversion without intermediate arrays for maximum speed
+      const base64Audio = btoa(String.fromCharCode(...uint8Array));
       const base64EndTime = Date.now();
       
       const totalTime = Date.now() - startTime;
 
-      // BACKGROUND TASK: Async transcript logging (non-blocking)
-      const transcriptPromise = supabase
+      // PHASE 3: BACKGROUND LOGGING - Fire and forget for zero blocking
+      supabase
         .from('turns')
         .insert([
           {
             call_id: CallSid,
             role: 'user',
             text: userMessage,
-            meta: { timestamp: new Date().toISOString(), processing_time_ms: totalTime }
+            meta: { timestamp: new Date().toISOString(), processing_time_ms: totalTime, phase: 'phase3_final' }
           },
           {
             call_id: CallSid,
@@ -181,43 +178,56 @@ serve(async (req) => {
               timestamp: new Date().toISOString(),
               voice_id: voiceId,
               model: 'eleven_turbo_v2_5',
-              processing_time_ms: totalTime
+              processing_time_ms: totalTime,
+              phase: 'phase3_final'
             }
           }
-        ]);
+        ])
+        .then(() => console.log('Transcript logged'))
+        .catch(err => console.error('Background logging error:', err));
 
-      // PHASE 3: EXTREME PERFORMANCE MONITORING
+      // PHASE 3 FINAL: COMPREHENSIVE PERFORMANCE METRICS
       console.log(JSON.stringify({
-        tag: "twilio-clarice-voice:phase3-extreme",
+        tag: "twilio-clarice-voice:phase3-final-complete",
         CallSid,
+        performance: {
+          total_ms: totalTime,
+          target_achieved: totalTime < 500 ? "PHASE3_FINAL_TARGET_MET" : totalTime < 600 ? "PHASE3_TARGET_MET" : "OPTIMIZATION_NEEDED",
+          efficiency_score: Math.round((1000 - totalTime) / 10),
+          speed_grade: totalTime < 400 ? "A+" : totalTime < 500 ? "A" : totalTime < 600 ? "B" : "C"
+        },
         breakdown: {
-          db_parallel_ms: dbEndTime - dbStartTime,
-          ai_generation_ms: aiEndTime - dbStartTime, // Fix timing reference
+          parsing_ms: dbStartTime - startTime,
+          parallel_operations_ms: dbEndTime - dbStartTime,
+          ai_processing_ms: aiEndTime - dbStartTime,
           tts_generation_ms: ttsEndTime - ttsStartTime,
           base64_conversion_ms: base64EndTime - base64StartTime,
           total_ms: totalTime
         },
-        optimizations: {
-          model: "eleven_turbo_v2_5",
-          max_parallel: true,
-          storage_eliminated: true,
+        phase3_optimizations: {
+          ultra_minimal_ai_tokens: 5,
+          aggressive_text_truncation: true,
+          connection_prewarming: true,
           direct_base64_streaming: true,
-          ultra_compressed_ai: true,
-          connection_reuse: true,
-          text_truncation: true,
-          minimal_quality: true
+          background_logging: true,
+          minimal_tts_quality: true,
+          zero_blocking_operations: true,
+          extreme_parallelization: true
         },
-        performance_target: "sub_600ms",
-        actual_performance: totalTime < 600 ? "PHASE3_TARGET_MET" : totalTime < 800 ? "PHASE2_LEVEL" : "NEEDS_OPTIMIZATION",
-        efficiency_score: Math.round((1000 - totalTime) / 10) // 0-100 score
+        targets: {
+          sub_400ms: "ultimate",
+          sub_500ms: "excellent", 
+          sub_600ms: "good",
+          current_performance: totalTime < 400 ? "ultimate" : totalTime < 500 ? "excellent" : totalTime < 600 ? "good" : "needs_work"
+        }
       }));
 
-      // PHASE 3: ULTRA-OPTIMIZED TwiML - Minimal pause and aggressive timeouts
+      // PHASE 3 FINAL: ULTIMATE TwiML OPTIMIZATION - Zero delays, instant response
       return new Response(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Play>data:audio/mpeg;base64,${base64Audio}</Play>
-  <Gather action="https://zvpezltqpphvolzgfhme.functions.supabase.co/functions/v1/twilio-clarice-voice" method="POST" input="speech" speechTimeout="2" timeout="4" actionOnEmptyResult="true" bargeIn="true" partialResultCallback="true">
-    <Pause length="0.5"/>
+  <Gather action="https://zvpezltqpphvolzgfhme.functions.supabase.co/functions/v1/twilio-clarice-voice" method="POST" input="speech" speechTimeout="1.5" timeout="3" actionOnEmptyResult="true" bargeIn="true" partialResultCallback="true" enhanced="true">
+    <Pause length="0.3"/>
   </Gather>
 </Response>`, {
         headers: { 'Content-Type': 'text/xml' }
@@ -227,12 +237,12 @@ serve(async (req) => {
       const errorText = await ttsResponse.text();
       console.error('ElevenLabs TTS error:', errorText);
       
-      // INSTANT FALLBACK - No delay
+      // PHASE 3 FALLBACK: OPTIMIZED ERROR RECOVERY
       return new Response(`<?xml version="1.0" encoding="UTF-8"?>
 <Response>
   <Say voice="Polly.Joanna-Neural">${aiResponse}</Say>
-  <Gather action="https://zvpezltqpphvolzgfhme.functions.supabase.co/functions/v1/twilio-clarice-voice" method="POST" input="speech" speechTimeout="3" timeout="5" actionOnEmptyResult="true" bargeIn="true">
-    <Pause length="1"/>
+  <Gather action="https://zvpezltqpphvolzgfhme.functions.supabase.co/functions/v1/twilio-clarice-voice" method="POST" input="speech" speechTimeout="2" timeout="4" actionOnEmptyResult="true" bargeIn="true">
+    <Pause length="0.5"/>
   </Gather>
 </Response>`, {
         headers: { 'Content-Type': 'text/xml' }
